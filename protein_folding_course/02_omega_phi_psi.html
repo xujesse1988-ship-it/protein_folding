@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ω、φ、ψ —— 主链上的三个二面角（配套第 2 章）</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a24; --panel2:#1f2330; --line:#2b3040;
+    --text:#e7e9f0; --dim:#9aa0b4; --accentphi:#f5a623; --accentpsi:#22c7d6; --accentome:#c77dff;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;}
+  header{padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{margin:0;font-size:18px;letter-spacing:.5px}
+  header p{margin:4px 0 0;color:var(--dim);font-size:13px}
+  .wrap{display:flex;height:calc(100% - 62px);min-height:0}
+  .stage{position:relative;flex:1 1 auto;min-width:0;background:radial-gradient(circle at 50% 40%,#161a26 0%,#0d0f15 80%)}
+  canvas{display:block;width:100%;height:100%;cursor:grab;touch-action:none}
+  canvas:active{cursor:grabbing}
+  .hint{position:absolute;left:14px;bottom:12px;color:var(--dim);font-size:12px;pointer-events:none;
+    background:rgba(15,17,23,.55);padding:6px 10px;border-radius:8px;border:1px solid var(--line)}
+  .panel{flex:0 0 360px;max-width:46%;overflow-y:auto;border-left:1px solid var(--line);background:var(--panel);padding:16px}
+  .panel h2{font-size:14px;margin:18px 0 8px;color:#fff}
+  .panel h2:first-child{margin-top:0}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+  .row{display:flex;align-items:center;gap:10px;margin:10px 0}
+  .row label{flex:0 0 64px;font-weight:600}
+  .row .chip{display:inline-block;width:12px;height:12px;border-radius:3px;flex:0 0 auto}
+  input[type=range]{flex:1 1 auto;accent-color:#9aa0b4}
+  .val{flex:0 0 78px;text-align:right;font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px}
+  .ome .val{flex:0 0 78px}
+  .state{font-size:12px;color:var(--dim);margin:-4px 0 6px 74px}
+  .axisname{font-size:12px;color:var(--dim);margin-left:74px;margin-top:-6px}
+  .btns{display:flex;flex-wrap:wrap;gap:8px}
+  button{background:#262b3a;color:var(--text);border:1px solid var(--line);border-radius:8px;
+    padding:7px 11px;font-size:13px;cursor:pointer}
+  button:hover{background:#30374a}
+  .toggles{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;color:var(--dim)}
+  .toggles label{display:flex;align-items:center;gap:6px;cursor:pointer}
+  .legend{font-size:12.5px;color:var(--dim);line-height:1.9}
+  .legend .chip{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:middle}
+  .legend .ball{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .note{font-size:12.5px;color:var(--dim);line-height:1.75}
+  .note b{color:#e7e9f0}
+  .kbd{font-family:ui-monospace,Menlo,Consolas,monospace;background:#0d0f15;border:1px solid var(--line);
+    border-radius:4px;padding:0 5px;color:#cfd2dc}
+  code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#cdd6f4}
+  .phi{color:var(--accentphi)} .psi{color:var(--accentpsi)} .ome{color:var(--accentome)}
+</style>
+</head>
+<body>
+<header>
+  <h1>ω、φ、ψ —— 主链上的三个二面角</h1>
+  <p>配套《第 2 章 生物化学最小必需集》2.2.2–2.2.3：肽平面、部分双键与三个主链旋钮</p>
+</header>
+
+<div class="wrap">
+  <div class="stage">
+    <canvas id="cv"></canvas>
+    <div class="hint">拖动画布旋转视角 · 滚轮缩放 · 拖动右侧滑块转动各二面角</div>
+  </div>
+
+  <aside class="panel">
+    <h2>三个旋钮</h2>
+    <div class="card">
+      <div class="row ome">
+        <span class="chip" style="background:var(--accentome)"></span>
+        <label>ω <span class="ome">(omega)</span></label>
+        <input id="sOme" type="range" min="-180" max="180" step="1" value="180">
+        <span class="val" id="vOme">180°</span>
+      </div>
+      <div class="axisname">绕 <b>C–N 肽键</b>旋转（残基 2→3）</div>
+      <div class="state" id="stOme">反式 trans（正常）</div>
+
+      <div class="row">
+        <span class="chip" style="background:var(--accentphi)"></span>
+        <label>φ <span class="phi">(phi)</span></label>
+        <input id="sPhi" type="range" min="-180" max="180" step="1" value="-65">
+        <span class="val" id="vPhi">-65°</span>
+      </div>
+      <div class="axisname">绕 <b>N–Cα 键</b>旋转（残基 2）</div>
+
+      <div class="row">
+        <span class="chip" style="background:var(--accentpsi)"></span>
+        <label>ψ <span class="psi">(psi)</span></label>
+        <input id="sPsi" type="range" min="-180" max="180" step="1" value="-40">
+        <span class="val" id="vPsi">-40°</span>
+      </div>
+      <div class="axisname">绕 <b>Cα–C 键</b>旋转（残基 2）</div>
+    </div>
+
+    <h2>预设</h2>
+    <div class="card btns">
+      <button data-p="reset">重置</button>
+      <button data-p="helix">α 螺旋 φ≈-57 ψ≈-47</button>
+      <button data-p="sheet">β 折叠 φ≈-120 ψ≈130</button>
+      <button data-p="cis">顺式肽键 ω=0°</button>
+      <button data-p="twist">把 ω 扭到 90°</button>
+    </div>
+
+    <h2>显示</h2>
+    <div class="card toggles">
+      <label><input type="checkbox" id="tPlane" checked> 肽平面（硬纸板）</label>
+      <label><input type="checkbox" id="tLabel" checked> 原子标签</label>
+      <label><input type="checkbox" id="tH" checked> 酰胺 H</label>
+      <label><input type="checkbox" id="tCB" checked> 侧链 Cβ</label>
+    </div>
+
+    <h2>图例</h2>
+    <div class="card legend">
+      <div><span class="chip" style="background:var(--accentphi)"></span>φ：绕 N–Cα 旋转的轴</div>
+      <div><span class="chip" style="background:var(--accentpsi)"></span>ψ：绕 Cα–C 旋转的轴</div>
+      <div><span class="chip" style="background:var(--accentome)"></span>ω：绕 C–N 肽键（可调）</div>
+      <div><span class="chip" style="background:#9a86c9"></span>另一条肽键 C–N（固定在 180°，提醒你它同样刚性）</div>
+      <hr style="border:none;border-top:1px solid var(--line);margin:8px 0">
+      <div><span class="ball" style="background:#4b7bec"></span>N 氮 &nbsp;
+           <span class="ball" style="background:#cfd2dc"></span>C 碳 &nbsp;
+           <span class="ball" style="background:#eb4d3d"></span>O 氧</div>
+      <div><span class="ball" style="background:#eef0f3;border:1px solid #555"></span>H 氢 &nbsp;
+           <span class="ball" style="background:#7bd88f"></span>Cβ 侧链起点</div>
+    </div>
+
+    <h2>关键直觉</h2>
+    <div class="card note">
+      <p>两块半透明"硬纸板"是相邻的<b>两个肽平面</b>——参与肽键的六个原子共面，整块是<b>刚性</b>的。</p>
+      <p>纸板之间在中间残基的 <b>Cα</b> 处用两个铰链相连，就是 <b class="phi">φ</b> 和 <b class="psi">ψ</b>——主链真正的"<b>可调旋钮</b>"。转动它们，下游的纸板与残基 3 随之摆动。</p>
+      <p><b class="ome">ω</b> 则是纸板<b>自身</b>绕肽键 C–N 的扭转。因为肽键有部分双键性质（旋转能垒约 <b>80 kJ/mol</b>），ω 几乎被锁死在 <b>180°（反式 trans）</b>。把 ω 拨离 180°，你会看到纸板被"拧弯"、共面被破坏——这正是大自然花 80 kJ/mol 去禁止的事。</p>
+      <p>偶尔 ω≈0°（<b>顺式 cis</b>），最常见于<b>下一个残基是脯氨酸</b>时（X–Pro，约 5–10%）。试试上面的"顺式肽键"和"把 ω 扭到 90°"两个预设。</p>
+      <p>所有合法的 <b class="phi">φ</b>、<b class="psi">ψ</b> 组合，就构成第 3 章要讲的 <b>Ramachandran 图</b>。</p>
+    </div>
+  </aside>
+</div>
+
+<script>
+"use strict";
+/* ============ 向量工具 ============ */
+const V = {
+  sub:(a,b)=>({x:a.x-b.x,y:a.y-b.y,z:a.z-b.z}),
+  add:(a,b)=>({x:a.x+b.x,y:a.y+b.y,z:a.z+b.z}),
+  scale:(a,s)=>({x:a.x*s,y:a.y*s,z:a.z*s}),
+  cross:(a,b)=>({x:a.y*b.z-a.z*b.y, y:a.z*b.x-a.x*b.z, z:a.x*b.y-a.y*b.x}),
+  norm:(a)=>{const l=Math.hypot(a.x,a.y,a.z)||1; return {x:a.x/l,y:a.y/l,z:a.z/l};}
+};
+const D2R = Math.PI/180;
+
+/* NeRF：已知 A-B-C 三点，按 键长/键角/二面角(A-B-C-D) 放置 D。
+   直接令二面角 = 给定值，因此显示的 ω/φ/ψ 与 IUPAC 定义严格一致。 */
+function nerf(A,B,C,len,angDeg,dihDeg){
+  const ang=angDeg*D2R, dih=dihDeg*D2R;
+  const bc=V.norm(V.sub(C,B));
+  const n =V.norm(V.cross(V.sub(B,A), bc));
+  const m =V.cross(n, bc);                 // n⊥bc 已为单位长
+  const d={x:-len*Math.cos(ang), y:len*Math.sin(ang)*Math.cos(dih), z:len*Math.sin(ang)*Math.sin(dih)};
+  return V.add(C, V.add(V.scale(bc,d.x), V.add(V.scale(m,d.y), V.scale(n,d.z))));
+}
+/* sp2 平面型中心 X，已知两个相邻原子 P,Q，求第三个键方向（C=O、N-H 都在肽平面内） */
+function sp2third(X,P,Q,len){
+  const u=V.norm(V.sub(P,X)), v=V.norm(V.sub(Q,X));
+  const dir=V.norm(V.scale(V.add(u,v),-1));
+  return V.add(X, V.scale(dir,len));
+}
+/* sp3 四面体中心 X(已知两键 P,Q)，求伸出平面外的 Cβ 方向 */
+function sp3CB(X,P,Q,len){
+  const u=V.norm(V.sub(P,X)), v=V.norm(V.sub(Q,X));
+  const bis =V.norm(V.add(u,v));
+  const perp=V.norm(V.cross(u,v));
+  const c=Math.cos(54.75*D2R), s=Math.sin(54.75*D2R);
+  const dir=V.norm(V.add(V.scale(bis,-c), V.scale(perp,s)));
+  return V.add(X, V.scale(dir,len));
+}
+
+/* ============ 固定几何参数 ============ */
+const BL={NCA:1.46, CAC:1.52, CN:1.33, CO:1.23, NH:1.00, CACB:1.52};
+const BA={CACN:116, CNCA:122, NCAC:111};   // 键角
+const PSI1=150, OMEGA12=180, PHI3=-65;      // 固定的相邻二面角
+
+/* 构建三个残基的全部原子坐标 */
+function buildMolecule(phi,psi,omega){
+  const A={};
+  const mk=(el,label)=>({el,label});
+  A.N1=mk('N','N'); A.CA1=mk('C','Cα'); A.C1=mk('C','C');
+  A.N1.pos={x:0,y:0,z:0};
+  A.CA1.pos={x:BL.NCA,y:0,z:0};
+  const a=69*D2R;                                   // 由 N-CA-C=111° 推出
+  A.C1.pos={x:BL.NCA+BL.CAC*Math.cos(a), y:BL.CAC*Math.sin(a), z:0};
+
+  A.N2=mk('N','N');  A.N2.pos =nerf(A.N1.pos,A.CA1.pos,A.C1.pos, BL.CN, BA.CACN, PSI1);
+  A.CA2=mk('C','Cα');A.CA2.pos=nerf(A.CA1.pos,A.C1.pos,A.N2.pos, BL.NCA,BA.CNCA, OMEGA12);
+  A.C2=mk('C','C');  A.C2.pos =nerf(A.C1.pos,A.N2.pos,A.CA2.pos, BL.CAC,BA.NCAC, phi);     // φ → C2
+  A.N3=mk('N','N');  A.N3.pos =nerf(A.N2.pos,A.CA2.pos,A.C2.pos, BL.CN, BA.CACN, psi);     // ψ → N3
+  A.CA3=mk('C','Cα');A.CA3.pos=nerf(A.CA2.pos,A.C2.pos,A.N3.pos, BL.NCA,BA.CNCA, omega);   // ω → CA3
+  A.C3=mk('C','C');  A.C3.pos =nerf(A.C2.pos,A.N3.pos,A.CA3.pos, BL.CAC,BA.NCAC, PHI3);
+
+  A.O1=mk('O','O'); A.O1.pos=sp2third(A.C1.pos,A.CA1.pos,A.N2.pos,BL.CO);
+  A.O2=mk('O','O'); A.O2.pos=sp2third(A.C2.pos,A.CA2.pos,A.N3.pos,BL.CO);
+  A.O3=mk('O','O'); A.O3.pos=sp2third(A.C3.pos,A.CA3.pos,A.N3.pos,BL.CO);
+  A.H2=mk('H','H'); A.H2.pos=sp2third(A.N2.pos,A.C1.pos,A.CA2.pos,BL.NH);
+  A.H3=mk('H','H'); A.H3.pos=sp2third(A.N3.pos,A.C2.pos,A.CA3.pos,BL.NH);
+  A.CB1=mk('CB','Cβ'); A.CB1.pos=sp3CB(A.CA1.pos,A.N1.pos,A.C1.pos,BL.CACB);
+  A.CB2=mk('CB','Cβ'); A.CB2.pos=sp3CB(A.CA2.pos,A.N2.pos,A.C2.pos,BL.CACB);
+  A.CB3=mk('CB','Cβ'); A.CB3.pos=sp3CB(A.CA3.pos,A.N3.pos,A.C3.pos,BL.CACB);
+
+  A.CA1.res=1; A.CA2.res=2; A.CA3.res=3;
+  // 以中间残基的 Cα2 为原点（它在任何角度下都固定不动 → 画面不会乱跳）
+  const o={...A.CA2.pos};
+  for(const k in A) A[k].pos=V.sub(A[k].pos,o);
+  return A;
+}
+
+/* ============ 键 / 平面 定义 ============ */
+const ACCENT={phi:'#f5a623', psi:'#22c7d6', omega:'#c77dff'};
+const PEPCOL='#9a86c9';
+const COL={N:'#4b7bec', C:'#cfd2dc', O:'#eb4d3d', H:'#eef0f3', CB:'#7bd88f'};
+const RAD={N:.31, C:.31, O:.29, H:.20, CB:.31};
+
+const BONDS=[
+  {a:'N1',b:'CA1'}, {a:'CA1',b:'C1'},
+  {a:'C1',b:'N2',pep:true},               // 固定肽键
+  {a:'N2',b:'CA2',accent:'phi'},          // φ 轴
+  {a:'CA2',b:'C2',accent:'psi'},          // ψ 轴
+  {a:'C2',b:'N3',pep:true,accent:'omega'},// ω 轴（可调肽键）
+  {a:'N3',b:'CA3'}, {a:'CA3',b:'C3'},
+  {a:'C1',b:'O1',dbl:true}, {a:'C2',b:'O2',dbl:true}, {a:'C3',b:'O3',dbl:true},
+  {a:'N2',b:'H2',h:true}, {a:'N3',b:'H3',h:true},
+  {a:'CA1',b:'CB1',cb:true}, {a:'CA2',b:'CB2',cb:true}, {a:'CA3',b:'CB3',cb:true},
+];
+const PLANE_A=[['CA1','C1','N2'],['C1','N2','CA2']];   // 肽平面 1（固定）
+const PLANE_B=[['CA2','C2','N3'],['C2','N3','CA3']];   // 肽平面 2（随 ω 翻折）
+
+/* ============ 相机 / 投影 ============ */
+const canvas=document.getElementById('cv');
+const ctx=canvas.getContext('2d');
+let W=0,H=0, yaw=-0.55, pitch=0.32, dist=15.5, focal=470;
+let MOL=null;
+const cur={phi:-65,psi:-40,omega:180};
+const target={...cur};
+let active=null;
+const show={plane:true,label:true,h:true,cb:true};
+
+function resize(){
+  const r=canvas.getBoundingClientRect(); W=r.width; H=r.height;
+  const dpr=window.devicePixelRatio||1;
+  canvas.width=W*dpr; canvas.height=H*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+window.addEventListener('resize',resize);
+
+function project(p){
+  const cy=Math.cos(yaw), sy=Math.sin(yaw);
+  let x1=p.x*cy+p.z*sy, z1=-p.x*sy+p.z*cy, y1=p.y;
+  const cx=Math.cos(pitch), sx=Math.sin(pitch);
+  let y2=y1*cx-z1*sx, z2=y1*sx+z1*cx, x2=x1;
+  const zc=z2+dist, f=focal/zc;
+  return {x:W/2+x2*f, y:H/2-y2*f, z:zc, scale:f};
+}
+
+/* ============ 绘制基元 ============ */
+function lighten(hex,t){
+  const c=hex.replace('#',''); const r=parseInt(c.substr(0,2),16),g=parseInt(c.substr(2,2),16),b=parseInt(c.substr(4,2),16);
+  return `rgb(${Math.round(r+(255-r)*t)},${Math.round(g+(255-g)*t)},${Math.round(b+(255-b)*t)})`;
+}
+function hexA(hex,al){const c=hex.replace('#','');return `rgba(${parseInt(c.substr(0,2),16)},${parseInt(c.substr(2,2),16)},${parseInt(c.substr(4,2),16)},${al})`;}
+function seg(x1,y1,x2,y2){ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
+
+function drawSphere(px,py,r,color){
+  if(r<0.4)return;
+  const g=ctx.createRadialGradient(px-r*0.35,py-r*0.35,r*0.1,px,py,r);
+  g.addColorStop(0,lighten(color,0.55)); g.addColorStop(1,color);
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(px,py,r,0,7); ctx.fill();
+  ctx.lineWidth=Math.max(.5,r*0.07); ctx.strokeStyle='rgba(0,0,0,.4)'; ctx.stroke();
+}
+
+function pushTri(prims,proj,k1,k2,k3,color){
+  const a=proj[k1],b=proj[k2],c=proj[k3];
+  prims.push({depth:(a.z+b.z+c.z)/3, draw:()=>{
+    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.lineTo(c.x,c.y);ctx.closePath();
+    ctx.fillStyle=color; ctx.fill();
+    ctx.strokeStyle='rgba(150,170,220,.35)';ctx.lineWidth=1;ctx.stroke();
+  }});
+}
+function pushBond(prims,proj,bd){
+  const pa=proj[bd.a], pb=proj[bd.b];
+  prims.push({depth:(pa.z+pb.z)/2, draw:()=>{
+    const w=0.17*((pa.scale+pb.scale)/2);
+    ctx.lineCap='round';
+    if(bd.accent){
+      const col=ACCENT[bd.accent];
+      ctx.strokeStyle=hexA(col,.28); ctx.lineWidth=w*3.4; seg(pa.x,pa.y,pb.x,pb.y);
+      ctx.strokeStyle=col;          ctx.lineWidth=w*1.55; seg(pa.x,pa.y,pb.x,pb.y);
+    } else if(bd.pep){
+      ctx.strokeStyle=PEPCOL; ctx.lineWidth=w*1.3; seg(pa.x,pa.y,pb.x,pb.y);
+    } else {
+      const c1=COL[MOL[bd.a].el], c2=COL[MOL[bd.b].el];
+      const mx=(pa.x+pb.x)/2, my=(pa.y+pb.y)/2;
+      if(bd.dbl){
+        const dx=pb.x-pa.x,dy=pb.y-pa.y,L=Math.hypot(dx,dy)||1, ox=-dy/L*w*.8, oy=dx/L*w*.8;
+        ctx.lineWidth=w*0.62;
+        ctx.strokeStyle=c1;seg(pa.x+ox,pa.y+oy,mx+ox,my+oy);ctx.strokeStyle=c2;seg(mx+ox,my+oy,pb.x+ox,pb.y+oy);
+        ctx.strokeStyle=c1;seg(pa.x-ox,pa.y-oy,mx-ox,my-oy);ctx.strokeStyle=c2;seg(mx-ox,my-oy,pb.x-ox,pb.y-oy);
+      } else {
+        ctx.lineWidth=w; ctx.strokeStyle=c1; seg(pa.x,pa.y,mx,my); ctx.strokeStyle=c2; seg(mx,my,pb.x,pb.y);
+      }
+    }
+  }});
+}
+function pushAtom(prims,proj,k,at){
+  const r=(at.label==='Cα'?0.34:RAD[at.el])*proj[k].scale;
+  prims.push({depth:proj[k].z, draw:()=>drawSphere(proj[k].x,proj[k].y,r,COL[at.el])});
+}
+
+function drawSpinner(cx,cy,color){
+  ctx.save(); ctx.strokeStyle=color; ctx.lineWidth=2.2; ctx.lineCap='round';
+  const a0=Math.PI*0.15, a1=Math.PI*1.55, R=12;
+  ctx.beginPath(); ctx.arc(cx,cy,R,a0,a1); ctx.stroke();
+  const ex=cx+R*Math.cos(a1), ey=cy+R*Math.sin(a1);
+  const tx=-Math.sin(a1), ty=Math.cos(a1);
+  ctx.beginPath();
+  ctx.moveTo(ex,ey); ctx.lineTo(ex-tx*6-Math.cos(a1)*4, ey-ty*6-Math.sin(a1)*4);
+  ctx.moveTo(ex,ey); ctx.lineTo(ex-tx*6+Math.cos(a1)*4, ey-ty*6+Math.sin(a1)*4);
+  ctx.stroke(); ctx.restore();
+}
+function drawDashedAxis(pa,pb,color){
+  const dx=pb.x-pa.x, dy=pb.y-pa.y, L=Math.hypot(dx,dy)||1, ux=dx/L, uy=dy/L, ext=46;
+  ctx.save(); ctx.setLineDash([6,6]); ctx.strokeStyle=hexA(color,.55); ctx.lineWidth=1.4;
+  seg(pa.x-ux*ext,pa.y-uy*ext, pb.x+ux*ext,pb.y+uy*ext); ctx.restore();
+}
+function label(px,py,text,color){
+  ctx.font='600 12px -apple-system,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.lineWidth=3.2; ctx.strokeStyle='rgba(8,10,15,.9)'; ctx.strokeText(text,px,py);
+  ctx.fillStyle=color; ctx.fillText(text,px,py);
+}
+
+/* ============ 主循环 ============ */
+function frame(){
+  requestAnimationFrame(frame);
+  let moving=false;
+  for(const k of ['phi','psi','omega']){
+    if(Math.abs(target[k]-cur[k])>0.15){cur[k]+=(target[k]-cur[k])*0.2; moving=true;}
+    else cur[k]=target[k];
+  }
+  if(moving) syncUI();
+
+  MOL=buildMolecule(cur.phi,cur.psi,cur.omega);
+  const proj={}; for(const k in MOL) proj[k]=project(MOL[k].pos);
+
+  const prims=[];
+  if(show.plane){
+    for(const t of PLANE_A) pushTri(prims,proj,t[0],t[1],t[2], hexA('#7f93cf',.20));
+    for(const t of PLANE_B) pushTri(prims,proj,t[0],t[1],t[2], hexA('#c77dff',.16));
+  }
+  for(const bd of BONDS){
+    if(!show.h && bd.h) continue; if(!show.cb && bd.cb) continue;
+    pushBond(prims,proj,bd);
+  }
+  for(const k in MOL){
+    const at=MOL[k];
+    if(!show.h && at.el==='H') continue; if(!show.cb && at.el==='CB') continue;
+    pushAtom(prims,proj,k,at);
+  }
+  prims.sort((p,q)=>q.depth-p.depth);
+
+  ctx.clearRect(0,0,W,H);
+  for(const p of prims) p.draw();
+
+  // 叠加层：旋转提示 + 当前激活轴 + 标签
+  const axisKeys={phi:['N2','CA2'], psi:['CA2','C2'], omega:['C2','N3']};
+  if(active && axisKeys[active]) drawDashedAxis(proj[axisKeys[active][0]], proj[axisKeys[active][1]], ACCENT[active]);
+  for(const a of ['phi','psi','omega']){
+    const [k1,k2]=axisKeys[a];
+    drawSpinner((proj[k1].x+proj[k2].x)/2, (proj[k1].y+proj[k2].y)/2, ACCENT[a]);
+  }
+  if(show.label){
+    for(const k in MOL){
+      const at=MOL[k];
+      if(!show.h && at.el==='H') continue; if(!show.cb && at.el==='CB') continue;
+      const p=proj[k], off=((at.label==='Cα'?0.34:RAD[at.el])*p.scale)+9;
+      label(p.x, p.y-off, at.label, at.el==='CB'?'#7bd88f':'#e7e9f0');
+      if(at.res){
+        label(p.x, p.y+off+2, '残基'+at.res, 'rgba(180,188,210,.85)');
+      }
+    }
+  }
+}
+
+/* ============ UI ============ */
+function angDist(a,b){let d=Math.abs(a-b)%360; if(d>180)d=360-d; return d;}
+function omegaState(w){
+  if(angDist(w,180)<25) return '反式 trans（正常，绝大多数肽键）';
+  if(angDist(w,0)<25)   return '顺式 cis（罕见，多见于 X–Pro）';
+  return '扭曲构象（高能，被部分双键禁止！）';
+}
+const els={
+  sPhi:document.getElementById('sPhi'), vPhi:document.getElementById('vPhi'),
+  sPsi:document.getElementById('sPsi'), vPsi:document.getElementById('vPsi'),
+  sOme:document.getElementById('sOme'), vOme:document.getElementById('vOme'),
+  stOme:document.getElementById('stOme'),
+};
+function syncUI(){
+  els.sPhi.value=Math.round(cur.phi); els.vPhi.textContent=Math.round(cur.phi)+'°';
+  els.sPsi.value=Math.round(cur.psi); els.vPsi.textContent=Math.round(cur.psi)+'°';
+  els.sOme.value=Math.round(cur.omega); els.vOme.textContent=Math.round(cur.omega)+'°';
+  els.stOme.textContent=omegaState(cur.omega);
+}
+els.sPhi.addEventListener('input',e=>{active='phi'; cur.phi=target.phi=+e.target.value; syncUI();});
+els.sPsi.addEventListener('input',e=>{active='psi'; cur.psi=target.psi=+e.target.value; syncUI();});
+els.sOme.addEventListener('input',e=>{active='omega'; cur.omega=target.omega=+e.target.value; syncUI();});
+
+const PRESETS={
+  reset:{phi:-65,psi:-40,omega:180}, helix:{phi:-57,psi:-47,omega:180},
+  sheet:{phi:-120,psi:130,omega:180}, cis:{phi:-65,psi:-40,omega:0}, twist:{phi:-65,psi:-40,omega:90},
+};
+document.querySelectorAll('button[data-p]').forEach(b=>b.addEventListener('click',()=>{
+  const p=PRESETS[b.dataset.p]; if(!p)return;
+  target.phi=p.phi; target.psi=p.psi; target.omega=p.omega;
+  active = b.dataset.p==='cis'||b.dataset.p==='twist' ? 'omega' : null;
+}));
+document.getElementById('tPlane').addEventListener('change',e=>show.plane=e.target.checked);
+document.getElementById('tLabel').addEventListener('change',e=>show.label=e.target.checked);
+document.getElementById('tH').addEventListener('change',e=>show.h=e.target.checked);
+document.getElementById('tCB').addEventListener('change',e=>show.cb=e.target.checked);
+
+/* 鼠标 / 触摸：旋转视角 + 缩放 */
+let drag=false, lx=0, ly=0;
+canvas.addEventListener('pointerdown',e=>{drag=true;lx=e.clientX;ly=e.clientY;canvas.setPointerCapture(e.pointerId);});
+canvas.addEventListener('pointermove',e=>{
+  if(!drag)return;
+  yaw  +=(e.clientX-lx)*0.01;
+  pitch+=(e.clientY-ly)*0.01;
+  pitch=Math.max(-1.4,Math.min(1.4,pitch));
+  lx=e.clientX; ly=e.clientY;
+});
+canvas.addEventListener('pointerup',()=>drag=false);
+canvas.addEventListener('pointercancel',()=>drag=false);
+canvas.addEventListener('wheel',e=>{e.preventDefault();dist=Math.max(8,Math.min(30,dist+e.deltaY*0.012));},{passive:false});
+
+resize(); syncUI(); frame();
+</script>
+</body>
+</html>
