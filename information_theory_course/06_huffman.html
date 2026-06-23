@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Huffman 编码 —— 从频率到最优前缀码 · 配套第 6 章</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a24; --panel2:#1f2330; --line:#2b3040;
+    --text:#e7e9f0; --dim:#9aa0b4; --helix:#f5a623; --sheet:#22c7d6; --hb:#ffd166;
+    --leaf:#7bd88f; --node:#4b7bec; --zero:#22c7d6; --one:#f5a623;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;}
+  header{padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{margin:0;font-size:18px;letter-spacing:.5px}
+  header p{margin:4px 0 0;color:var(--dim);font-size:13px}
+  header p b{color:#fff}
+  .wrap{display:flex;height:calc(100% - 62px);min-height:0}
+  .stage{position:relative;flex:1 1 auto;min-width:0;background:radial-gradient(circle at 50% 35%,#161a26 0%,#0d0f15 80%)}
+  canvas{display:block;width:100%;height:100%;touch-action:none}
+  .hint{position:absolute;left:14px;bottom:12px;color:var(--dim);font-size:12px;pointer-events:none;
+    background:rgba(15,17,23,.55);padding:6px 10px;border-radius:8px;border:1px solid var(--line)}
+  .badge{position:absolute;left:14px;top:12px;font-size:12.5px;pointer-events:none;
+    background:rgba(15,17,23,.6);padding:7px 11px;border-radius:8px;border:1px solid var(--line);line-height:1.7}
+  .badge b{color:#fff}
+  .panel{flex:0 0 388px;max-width:50%;overflow-y:auto;border-left:1px solid var(--line);background:var(--panel);padding:16px}
+  .panel h2{font-size:14px;margin:18px 0 8px;color:#fff}
+  .panel h2:first-child{margin-top:0}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+  button{background:#262b3a;color:var(--text);border:1px solid var(--line);border-radius:8px;
+    padding:7px 11px;font-size:13px;cursor:pointer}
+  button:hover{filter:brightness(1.12)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .btns{display:flex;gap:8px;flex-wrap:wrap}
+  .btns button{flex:1 1 0;min-width:78px}
+  .build{background:var(--helix);color:#0d0f15;font-weight:700;border-color:transparent}
+  .symtable{width:100%;border-collapse:collapse;font-size:13px}
+  .symtable th{color:var(--dim);font-weight:600;text-align:left;padding:4px 6px;font-size:12px}
+  .symtable td{padding:3px 6px}
+  .symtable input{width:100%;background:#0f1117;border:1px solid var(--line);color:var(--text);
+    border-radius:6px;padding:5px 7px;font-size:13px;font-variant-numeric:tabular-nums}
+  .symtable input.sym{text-align:center;font-weight:700}
+  .symtable input:focus{outline:none;border-color:var(--helix)}
+  .symtable .del{background:#3a2330;border-color:#523040;padding:4px 9px;color:#ff9aa8}
+  .symtable .del:hover{filter:brightness(1.2)}
+  .colsym{width:54px} .colfreq{width:86px} .colp{width:62px} .coldel{width:40px}
+  .stat{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px dashed #2b3040}
+  .stat:last-child{border-bottom:none}
+  .stat span:last-child{color:#fff;font-variant-numeric:tabular-nums}
+  .stat.big span:last-child{font-size:15px;font-weight:700}
+  .stat .ok{color:var(--leaf)!important}
+  .codetable{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}
+  .codetable th{color:var(--dim);font-weight:600;text-align:right;padding:4px 6px;font-size:11.5px;border-bottom:1px solid var(--line)}
+  .codetable th:first-child{text-align:center}
+  .codetable td{padding:4px 6px;text-align:right;border-bottom:1px dashed #2b3040}
+  .codetable td:first-child{text-align:center;font-weight:700}
+  .codetable .code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#cdd6f4;text-align:left;letter-spacing:1px}
+  .codetable .c0{color:var(--zero)} .codetable .c1{color:var(--one)}
+  .ineq{font-size:13px;text-align:center;padding:8px;border-radius:8px;background:#0f1117;border:1px solid var(--line);
+    font-variant-numeric:tabular-nums;line-height:1.8}
+  .ineq.ok{border-color:#2f6b45;background:#13251a}
+  .ineq.bad{border-color:#6b2f3a;background:#251316}
+  .ineq b{color:#fff}
+  .row{display:flex;align-items:center;gap:10px;margin:9px 0}
+  .row label{flex:0 0 110px;font-weight:600;font-size:13px}
+  input[type=range]{flex:1 1 auto;accent-color:#9aa0b4}
+  .val{flex:0 0 64px;text-align:right;font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px}
+  .legend{font-size:12.5px;color:var(--dim);line-height:1.95}
+  .legend .ball{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .legend .ln{display:inline-block;width:18px;border-top:3px solid;margin-right:6px;vertical-align:middle}
+  .note{font-size:12.5px;color:var(--dim);line-height:1.78}
+  .note b{color:#e7e9f0}
+  .note .h{color:var(--helix)} .note .s{color:var(--sheet)} .note .y{color:var(--hb)}
+  code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#cdd6f4}
+  .warn{color:#ff9aa8;font-size:12px;margin-top:6px;min-height:14px}
+  .addbtn{width:100%;margin-top:8px;border-style:dashed;color:var(--dim)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Huffman 编码 —— 从频率到最优前缀码</h1>
+  <p>配套《第 6 章 信息论》：自底向上合并频率，构造<b>最优前缀码</b>，并与<b>信源熵 H</b> 和<b>定长编码</b>对比</p>
+</header>
+
+<div class="wrap">
+  <div class="stage">
+    <canvas id="cv"></canvas>
+    <div class="badge" id="badge">编辑右侧符号表 → 点击「构造」</div>
+    <div class="hint">叶子 = 符号（绿色），内部节点 = 合并的子概率和 · 蓝边=0 / 橙边=1 · 码字沿根→叶读出</div>
+  </div>
+
+  <aside class="panel">
+    <h2>符号与频率</h2>
+    <div class="card">
+      <table class="symtable">
+        <thead>
+          <tr>
+            <th class="colsym">符号</th>
+            <th class="colfreq">频率/权重</th>
+            <th class="colp">概率 p</th>
+            <th class="coldel"></th>
+          </tr>
+        </thead>
+        <tbody id="symBody"></tbody>
+      </table>
+      <button class="addbtn" id="addRow">+ 添加符号</button>
+      <div class="warn" id="warn"></div>
+    </div>
+
+    <h2>操作</h2>
+    <div class="card">
+      <div class="btns">
+        <button class="build" id="btnBuild">构造</button>
+        <button id="btnStep">逐步合并</button>
+        <button id="btnAuto">自动播放</button>
+        <button id="btnReset">复位例子</button>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <label>动画速度</label>
+        <input id="sSpeed" type="range" min="200" max="1600" step="100" value="700">
+        <span class="val" id="vSpeed">700 ms</span>
+      </div>
+    </div>
+
+    <h2>码表（前缀码）</h2>
+    <div class="card">
+      <table class="codetable" id="codeTable">
+        <thead>
+          <tr><th>符号</th><th>p</th><th style="text-align:left">码字</th><th>码长 l</th><th>p·l</th></tr>
+        </thead>
+        <tbody id="codeBody"></tbody>
+      </table>
+    </div>
+
+    <h2>核心读数（单位：bit）</h2>
+    <div class="card" id="stats"></div>
+
+    <h2>定理验证</h2>
+    <div class="card">
+      <div class="ineq" id="ineq">构造后显示 H ≤ L &lt; H+1</div>
+    </div>
+
+    <h2>图例</h2>
+    <div class="card legend">
+      <div><span class="ball" style="background:var(--leaf)"></span>叶子（符号，标注码字） &nbsp;
+           <span class="ball" style="background:var(--node)"></span>内部节点（概率和）</div>
+      <div><span class="ln" style="border-color:var(--zero)"></span>分支 = <b style="color:var(--zero)">0</b> &nbsp;
+           <span class="ln" style="border-color:var(--one)"></span>分支 = <b style="color:var(--one)">1</b></div>
+      <div style="margin-top:6px"><code>L=Σ p·l</code> 期望码长 · <code>H=-Σ p·log₂p</code> 信源熵 · <code>⌈log₂n⌉</code> 定长码长</div>
+    </div>
+
+    <h2>关键直觉</h2>
+    <div class="card note" id="notes">
+      <p><b class="h">Huffman 算法</b>：把所有符号当作叶子放进一个集合，每次取出<b>概率最小的两个</b>合并成一个新节点（概率相加），直到只剩一个根。给两条分支分别标 <b class="s">0</b> 与 <b class="h">1</b>，从根到叶读出的 0/1 串就是该符号的码字。</p>
+      <p>这样得到的码是<b>前缀码</b>（没有任一码字是另一码字的前缀），可以无歧义地连续解码；而且它在所有前缀码里<b>期望码长最短</b>——这就是「最优」。</p>
+      <p><b>越频繁的符号码字越短</b>，这正是压缩的来源：把短码留给常见符号。</p>
+      <p><b>香农下界</b>保证 <code>H ≤ L</code>：再聪明的无损编码，平均每符号也不可能短于熵 <b class="y">H</b>。同时 Huffman 满足 <code>L &lt; H+1</code>，每符号至多比熵多花 1 bit。试着把概率改成 <b>2 的幂</b>（如 1/2,1/4,1/8,1/8），你会看到 <code>L=H</code> 恰好相等。</p>
+      <p>对比 <code>⌈log₂n⌉</code>（定长编码）：当概率分布不均匀时，Huffman 通常明显更短；当 n 个符号<b>等概率</b>时两者一致。</p>
+    </div>
+  </aside>
+</div>
+
+<script>
+"use strict";
+
+/* ============ 数据模型 ============ */
+const DEFAULT = [
+  {sym:'A', freq:40},
+  {sym:'B', freq:25},
+  {sym:'C', freq:15},
+  {sym:'D', freq:12},
+  {sym:'E', freq:8},
+];
+let rows = DEFAULT.map(r=>({...r}));
+
+/* ============ Huffman 构造（记录合并步骤用于动画）============ */
+let nextId = 0;
+function buildHuffman(symbols){
+  // symbols: [{sym, p}]  p 已归一化
+  nextId = 0;
+  const steps = [];               // 每步：合并的两个节点 id + 新节点
+  let nodes = symbols.map(s=>({
+    id: nextId++, sym:s.sym, p:s.p, leaf:true, left:null, right:null
+  }));
+  const leaves = nodes.slice();
+  // 用一个活动列表，每次取最小两个
+  let live = nodes.slice();
+  if(live.length === 1){
+    // 单符号特例：给它一个 1 长码
+    const only = live[0];
+    only.code = '0';
+    return {root: only, leaves, steps};
+  }
+  while(live.length > 1){
+    live.sort((a,b)=> a.p - b.p || a.id - b.id);
+    const a = live.shift();
+    const b = live.shift();
+    const parent = {
+      id: nextId++, sym:null, p:a.p+b.p, leaf:false,
+      left:a, right:b   // left -> 0, right -> 1
+    };
+    steps.push({a:a.id, b:b.id, parent:parent.id, p:parent.p});
+    live.push(parent);
+  }
+  const root = live[0];
+  // 赋码字
+  assignCodes(root, '');
+  return {root, leaves, steps};
+}
+function assignCodes(node, prefix){
+  if(node.leaf){ node.code = prefix===''?'0':prefix; return; }
+  assignCodes(node.left,  prefix+'0');
+  assignCodes(node.right, prefix+'1');
+}
+
+/* ============ 指标计算（log 以 2 为底 = bit）============ */
+function log2(x){ return Math.log(x)/Math.LN2; }
+function computeMetrics(symbols, leaves){
+  const n = symbols.length;
+  let H = 0, L = 0;
+  const byId = {};
+  leaves.forEach(l=>byId[l.sym]=l);
+  const detail = symbols.map(s=>{
+    const leaf = byId[s.sym];
+    const l = leaf.code.length;
+    L += s.p * l;
+    if(s.p > 0) H += -s.p * log2(s.p);
+    return {sym:s.sym, p:s.p, code:leaf.code, len:l, pl:s.p*l};
+  });
+  const fixed = n<=1 ? 1 : Math.ceil(log2(n));
+  return {n, H, L, fixed, redundancy:L-H, detail};
+}
+
+/* ============ 树布局：叶子按从左到右等间距，内部节点居中于子节点 ============ */
+function layoutTree(root, leaves){
+  // 先确定叶子顺序（中序遍历）
+  const order = [];
+  (function inorder(nd){
+    if(!nd) return;
+    if(nd.leaf){ order.push(nd); return; }
+    inorder(nd.left); inorder(nd.right);
+  })(root);
+  order.forEach((lf,i)=> lf._x = i);
+  // 计算深度
+  let maxDepth = 0;
+  (function depth(nd,d){
+    nd._d = d; maxDepth = Math.max(maxDepth, d);
+    if(!nd.leaf){ depth(nd.left,d+1); depth(nd.right,d+1); }
+  })(root,0);
+  // 内部节点 x = 子节点平均
+  (function setX(nd){
+    if(nd.leaf) return nd._x;
+    return nd._x = (setX(nd.left)+setX(nd.right))/2;
+  })(root);
+  return {order, maxDepth};
+}
+
+/* ============ Canvas 绘制 ============ */
+const canvas = document.getElementById('cv');
+const ctx = canvas.getContext('2d');
+let W=0,Hpx=0;
+function resize(){
+  const r = canvas.getBoundingClientRect(); W=r.width; Hpx=r.height;
+  const dpr = window.devicePixelRatio||1;
+  canvas.width=W*dpr; canvas.height=Hpx*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  draw();
+}
+window.addEventListener('resize',resize);
+
+let TREE = null;            // {root, leaves, steps}
+let LAYOUT = null;
+let revealStep = -1;        // -1 表示全部隐藏（只显示叶子，逐步模式起点）；>=steps.length 全显示
+let fullShown = true;       // 非动画：全部显示
+
+function colorForP(p){
+  // 概率越大颜色越暖（用于叶子轻微区分）
+  return 'var(--leaf)';
+}
+function roundRect(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,Hpx);
+  if(!TREE){ return; }
+  const {root, leaves} = TREE;
+  const {order, maxDepth} = LAYOUT;
+
+  const padX = 56, padTop = 46, padBot = 56;
+  const nLeaf = Math.max(1, order.length);
+  const usableW = Math.max(60, W - padX*2);
+  const usableH = Math.max(60, Hpx - padTop - padBot);
+  const xStep = nLeaf>1 ? usableW/(nLeaf-1) : 0;
+  const yStep = maxDepth>0 ? usableH/maxDepth : 0;
+
+  const px = nd => padX + (nLeaf>1 ? nd._x * xStep : usableW/2);
+  const py = nd => padTop + nd._d * yStep;
+
+  // 决定哪些内部节点已经“出现”（动画用）
+  // 在逐步模式：第 k 步合并产生的 parent 的 id 在 steps[0..revealStep] 中才显示
+  const shownIds = new Set();
+  leaves.forEach(l=>shownIds.add(l.id));
+  const stepsToShow = fullShown ? TREE.steps.length : (revealStep+1);
+  for(let i=0;i<stepsToShow && i<TREE.steps.length;i++){
+    shownIds.add(TREE.steps[i].parent);
+  }
+
+  // 先画边（仅当父子都已显示）
+  ctx.lineCap='round';
+  (function drawEdges(nd){
+    if(nd.leaf) return;
+    const childVisible = shownIds.has(nd.id);
+    [['left','0'],['right','1']].forEach(([side,bit])=>{
+      const ch = nd[side];
+      if(childVisible){
+        const x1=px(nd),y1=py(nd),x2=px(ch),y2=py(ch);
+        ctx.strokeStyle = bit==='0' ? getCss('--zero') : getCss('--one');
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+        // 0/1 标签
+        const mx=(x1+x2)/2, my=(y1+y2)/2;
+        ctx.font='700 13px ui-monospace,Menlo,monospace';
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        const r=9;
+        ctx.fillStyle='#0f1117';
+        ctx.beginPath(); ctx.arc(mx,my,r,0,7); ctx.fill();
+        ctx.strokeStyle = bit==='0' ? getCss('--zero') : getCss('--one');
+        ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(mx,my,r,0,7); ctx.stroke();
+        ctx.fillStyle = bit==='0' ? getCss('--zero') : getCss('--one');
+        ctx.fillText(bit, mx, my+0.5);
+      }
+      drawEdges(ch);
+    });
+  })(root);
+
+  // 再画节点
+  (function drawNodes(nd){
+    const visible = shownIds.has(nd.id);
+    if(visible){
+      const x=px(nd), y=py(nd);
+      if(nd.leaf){
+        // 叶子：圆角矩形，显示符号 + p + 码字
+        const code = nd.code || '';
+        const labelW = Math.max(46, 22 + code.length*7);
+        const w=labelW, h=40;
+        roundRect(x-w/2, y-h/2, w, h, 9);
+        const g=ctx.createLinearGradient(x,y-h/2,x,y+h/2);
+        g.addColorStop(0,'#2a3b2c'); g.addColorStop(1,'#1a261b');
+        ctx.fillStyle=g; ctx.fill();
+        ctx.strokeStyle=getCss('--leaf'); ctx.lineWidth=2; ctx.stroke();
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillStyle='#fff'; ctx.font='700 14px -apple-system,sans-serif';
+        ctx.fillText(nd.sym, x, y-9);
+        ctx.fillStyle=getCss('--dim'); ctx.font='11px -apple-system,sans-serif';
+        ctx.fillText('p='+nd.p.toFixed(3), x, y+5);
+        if(code && fullShown){
+          // 码字（彩色）画在叶子下方
+          drawCodeBelow(x, y+h/2+12, code);
+        }
+      } else {
+        // 内部节点：圆，显示概率和
+        const r=18;
+        const g=ctx.createRadialGradient(x-r*0.3,y-r*0.3,r*0.1,x,y,r);
+        g.addColorStop(0,'#6f97f0'); g.addColorStop(1,getCss('--node'));
+        ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill();
+        ctx.strokeStyle='rgba(0,0,0,.4)'; ctx.lineWidth=1.5; ctx.stroke();
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillStyle='#fff'; ctx.font='700 11.5px -apple-system,sans-serif';
+        ctx.fillText(nd.p.toFixed(3), x, y);
+      }
+    }
+    if(!nd.leaf){ drawNodes(nd.left); drawNodes(nd.right); }
+  })(root);
+
+  // 高亮最近一次合并（逐步模式）
+  if(!fullShown && revealStep>=0 && revealStep<TREE.steps.length){
+    const st = TREE.steps[revealStep];
+    const find = (nd)=> nd.id===st.parent ? nd : (nd.leaf?null:(find(nd.left)||find(nd.right)));
+    const parent = find(root);
+    if(parent){
+      const x=px(parent), y=py(parent);
+      ctx.strokeStyle=getCss('--hb'); ctx.lineWidth=2.5;
+      ctx.setLineDash([4,4]);
+      ctx.beginPath(); ctx.arc(x,y,26,0,7); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+}
+function drawCodeBelow(cx, y, code){
+  ctx.font='700 12px ui-monospace,Menlo,monospace';
+  ctx.textBaseline='top';
+  const chW=8;
+  const total=code.length*chW;
+  let x = cx - total/2;
+  ctx.textAlign='left';
+  for(const c of code){
+    ctx.fillStyle = c==='0'?getCss('--zero'):getCss('--one');
+    ctx.fillText(c, x, y);
+    x += chW;
+  }
+}
+const _cssCache={};
+function getCss(name){
+  if(_cssCache[name]) return _cssCache[name];
+  const v=getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return _cssCache[name]=v;
+}
+
+/* ============ 符号表 UI ============ */
+const symBody = document.getElementById('symBody');
+const warnEl = document.getElementById('warn');
+function renderSymTable(){
+  const total = rows.reduce((s,r)=> s + (r.freq>0?r.freq:0), 0);
+  symBody.innerHTML = rows.map((r,i)=>{
+    const p = total>0 ? (r.freq>0?r.freq:0)/total : 0;
+    return `<tr>
+      <td><input class="sym" data-i="${i}" data-k="sym" value="${escapeAttr(r.sym)}" maxlength="3"></td>
+      <td><input data-i="${i}" data-k="freq" type="number" min="0" step="any" value="${r.freq}"></td>
+      <td style="color:var(--dim);text-align:right;font-variant-numeric:tabular-nums">${p.toFixed(3)}</td>
+      <td><button class="del" data-del="${i}" ${rows.length<=2?'disabled':''}>×</button></td>
+    </tr>`;
+  }).join('');
+  symBody.querySelectorAll('input').forEach(inp=>{
+    inp.addEventListener('input', onCellEdit);
+  });
+  symBody.querySelectorAll('button[data-del]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const i=+b.dataset.del;
+      if(rows.length>2){ rows.splice(i,1); renderSymTable(); }
+    });
+  });
+}
+function escapeAttr(s){ return String(s).replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+function onCellEdit(e){
+  const i=+e.target.dataset.i, k=e.target.dataset.k;
+  if(k==='sym'){ rows[i].sym = e.target.value; }
+  else { rows[i].freq = parseFloat(e.target.value); if(isNaN(rows[i].freq)) rows[i].freq=0; }
+  // 只更新概率列，不重排（避免打断输入）
+  const total = rows.reduce((s,r)=> s + (r.freq>0?r.freq:0), 0);
+  const cells = symBody.querySelectorAll('tr');
+  rows.forEach((r,idx)=>{
+    const p = total>0 ? (r.freq>0?r.freq:0)/total : 0;
+    const pc = cells[idx].children[2];
+    if(pc) pc.textContent = p.toFixed(3);
+  });
+}
+document.getElementById('addRow').addEventListener('click', ()=>{
+  // 自动取下一个字母
+  const used = new Set(rows.map(r=>r.sym));
+  let cand='F';
+  for(let c=65;c<=90;c++){ const ch=String.fromCharCode(c); if(!used.has(ch)){ cand=ch; break; } }
+  rows.push({sym:cand, freq:5});
+  renderSymTable();
+});
+
+/* ============ 校验 + 构造 ============ */
+function validateAndNormalize(){
+  warnEl.textContent='';
+  const clean = rows
+    .map(r=>({sym:(r.sym||'').trim(), freq: (typeof r.freq==='number'&&r.freq>0)?r.freq:0}))
+    .filter(r=> r.freq>0 && r.sym!=='');
+  if(clean.length < 2){
+    warnEl.textContent='至少需要 2 个频率大于 0 的符号。';
+    return null;
+  }
+  const syms = clean.map(r=>r.sym);
+  if(new Set(syms).size !== syms.length){
+    warnEl.textContent='符号名称不能重复。';
+    return null;
+  }
+  const total = clean.reduce((s,r)=>s+r.freq,0);
+  return clean.map(r=>({sym:r.sym, p:r.freq/total}));
+}
+
+function doBuild(animate){
+  const symbols = validateAndNormalize();
+  if(!symbols) return;
+  TREE = buildHuffman(symbols);
+  LAYOUT = layoutTree(TREE.root, TREE.leaves);
+  if(animate){
+    fullShown=false; revealStep=-1;
+    btnStep.disabled=false;
+  } else {
+    fullShown=true; revealStep=TREE.steps.length;
+    btnStep.disabled=false;
+  }
+  updateMetrics(symbols);
+  draw();
+}
+
+function updateMetrics(symbols){
+  const m = computeMetrics(symbols, TREE.leaves);
+  // 码表
+  const sorted = m.detail.slice().sort((a,b)=> b.p-a.p || a.len-b.len);
+  document.getElementById('codeBody').innerHTML = sorted.map(d=>{
+    const colored = [...d.code].map(c=>`<span class="c${c}">${c}</span>`).join('');
+    return `<tr>
+      <td>${escapeAttr(d.sym)}</td>
+      <td>${d.p.toFixed(3)}</td>
+      <td class="code">${colored}</td>
+      <td>${d.len}</td>
+      <td>${d.pl.toFixed(3)}</td>
+    </tr>`;
+  }).join('');
+
+  // 读数
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><span>符号数 n</span><span>${m.n}</span></div>
+    <div class="stat"><span>信源熵 H = -Σ p·log₂p</span><span>${m.H.toFixed(4)} bit</span></div>
+    <div class="stat big"><span>期望码长 L = Σ p·l</span><span>${m.L.toFixed(4)} bit</span></div>
+    <div class="stat"><span>冗余 L − H</span><span>${m.redundancy.toFixed(4)} bit</span></div>
+    <div class="stat"><span>定长编码 ⌈log₂n⌉</span><span>${m.fixed} bit</span></div>
+    <div class="stat"><span>相对定长节省</span><span>${(100*(m.fixed-m.L)/m.fixed).toFixed(1)} %</span></div>
+    <div class="stat"><span>编码效率 H / L</span><span>${(100*m.H/m.L).toFixed(2)} %</span></div>
+  `;
+
+  // 定理验证 H <= L < H+1
+  const lowerOK = m.L >= m.H - 1e-9;
+  const upperOK = m.L < m.H + 1 + 1e-9;
+  const ok = lowerOK && upperOK;
+  const ineq = document.getElementById('ineq');
+  ineq.className = 'ineq ' + (ok?'ok':'bad');
+  ineq.innerHTML = `
+    <div><b>H</b> = ${m.H.toFixed(4)} &nbsp; ≤ &nbsp; <b>L</b> = ${m.L.toFixed(4)} &nbsp; &lt; &nbsp; <b>H+1</b> = ${(m.H+1).toFixed(4)}</div>
+    <div style="margin-top:6px;color:${ok?'var(--leaf)':'#ff9aa8'}">${ok?'✓ 满足香农界 H ≤ L < H+1':'✗ 不满足（请检查输入）'}${Math.abs(m.redundancy)<1e-6?' · 此时 L = H（概率均为 2 的幂，编码最优无冗余）':''}</div>
+  `;
+
+  // badge
+  document.getElementById('badge').innerHTML =
+    `<b>n=${m.n}</b> 符号 · H=${m.H.toFixed(3)} bit · <span style="color:var(--helix)">L=${m.L.toFixed(3)} bit</span> · 定长=${m.fixed} bit`;
+}
+
+/* ============ 逐步 / 自动播放 ============ */
+const btnStep = document.getElementById('btnStep');
+let autoTimer = null;
+let speed = 700;
+function stepForward(){
+  if(!TREE) return;
+  if(fullShown){
+    // 进入逐步模式从头开始
+    fullShown=false; revealStep=-1;
+  }
+  if(revealStep < TREE.steps.length-1){
+    revealStep++;
+    draw();
+  }
+  if(revealStep >= TREE.steps.length-1){
+    // 全部合并完，显示完整码字
+    fullShown=true; revealStep=TREE.steps.length;
+    draw();
+    stopAuto();
+  }
+}
+function stopAuto(){
+  if(autoTimer){ clearInterval(autoTimer); autoTimer=null; }
+  document.getElementById('btnAuto').textContent='自动播放';
+}
+btnStep.addEventListener('click', stepForward);
+document.getElementById('btnAuto').addEventListener('click', ()=>{
+  if(autoTimer){ stopAuto(); return; }
+  if(!TREE) { doBuild(true); }
+  else if(fullShown){ fullShown=false; revealStep=-1; draw(); }
+  document.getElementById('btnAuto').textContent='暂停';
+  autoTimer = setInterval(stepForward, speed);
+});
+document.getElementById('btnBuild').addEventListener('click', ()=>{ stopAuto(); doBuild(false); });
+document.getElementById('btnReset').addEventListener('click', ()=>{
+  stopAuto();
+  rows = DEFAULT.map(r=>({...r}));
+  renderSymTable();
+  doBuild(false);
+});
+const sSpeed=document.getElementById('sSpeed'), vSpeed=document.getElementById('vSpeed');
+sSpeed.addEventListener('input', e=>{
+  speed=+e.target.value; vSpeed.textContent=speed+' ms';
+  if(autoTimer){ clearInterval(autoTimer); autoTimer=setInterval(stepForward, speed); }
+});
+
+/* ============ 启动 ============ */
+renderSymTable();
+resize();
+doBuild(false);
+</script>
+</body>
+</html>

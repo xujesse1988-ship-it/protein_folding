@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>渐近均分性与典型集 —— 概率如何集中到 2^{nH} 条序列 · 配套第 5 章</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a24; --panel2:#1f2330; --line:#2b3040;
+    --text:#e7e9f0; --dim:#9aa0b4;
+    --full:#5b6378;      /* 全空间 / 非典型 */
+    --typ:#22c7d6;       /* 典型集 */
+    --acc:#f5a623;       /* 强调 / 熵 H */
+    --good:#7bd88f;      /* 典型样本 */
+    --bad:#eb6f5c;       /* 非典型样本 */
+    --hb:#ffd166;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;}
+  header{padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{margin:0;font-size:18px;letter-spacing:.3px}
+  header p{margin:4px 0 0;color:var(--dim);font-size:13px}
+  header p b{color:#fff}
+  .wrap{display:flex;height:calc(100% - 62px);min-height:0}
+  .stage{position:relative;flex:1 1 auto;min-width:0;background:radial-gradient(circle at 50% 35%,#161a26 0%,#0d0f15 80%);overflow:hidden}
+  canvas{display:block;width:100%;height:100%}
+  .hint{position:absolute;left:14px;bottom:12px;color:var(--dim);font-size:12px;pointer-events:none;
+    background:rgba(15,17,23,.55);padding:6px 10px;border-radius:8px;border:1px solid var(--line)}
+  .badge{position:absolute;left:14px;top:12px;font-size:12.5px;pointer-events:none;
+    background:rgba(15,17,23,.6);padding:7px 11px;border-radius:8px;border:1px solid var(--line);line-height:1.7}
+  .badge b{color:#fff}
+  .panel{flex:0 0 380px;max-width:48%;overflow-y:auto;border-left:1px solid var(--line);background:var(--panel);padding:16px}
+  .panel h2{font-size:14px;margin:18px 0 8px;color:#fff}
+  .panel h2:first-child{margin-top:0}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+  .modes{display:flex;gap:8px}
+  .modes button{flex:1 1 0;padding:9px 6px;font-size:13px;line-height:1.4}
+  .modes button.on{border-color:transparent;color:#0d0f15;font-weight:700;background:var(--typ)}
+  button{background:#262b3a;color:var(--text);border:1px solid var(--line);border-radius:8px;
+    padding:7px 11px;font-size:13px;cursor:pointer}
+  button:hover{filter:brightness(1.12)}
+  .row{display:flex;align-items:center;gap:10px;margin:9px 0}
+  .row label{flex:0 0 92px;font-weight:600;font-size:13px}
+  input[type=range]{flex:1 1 auto;accent-color:var(--typ)}
+  .val{flex:0 0 70px;text-align:right;font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px}
+  .toggles{display:flex;flex-wrap:wrap;gap:12px 16px;font-size:13px;color:var(--dim)}
+  .toggles label{display:flex;align-items:center;gap:6px;cursor:pointer}
+  .stat{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px dashed #2b3040}
+  .stat:last-child{border-bottom:none}
+  .stat span:last-child{color:#fff;font-variant-numeric:tabular-nums}
+  .stat b{color:var(--typ)}
+  .legend{font-size:12.5px;color:var(--dim);line-height:1.95}
+  .legend .bar{display:inline-block;width:16px;height:9px;border-radius:3px;margin-right:6px;vertical-align:middle}
+  .note{font-size:12.5px;color:var(--dim);line-height:1.78}
+  .note b{color:#e7e9f0}
+  .note .t{color:var(--typ)} .note .a{color:var(--acc)} .note .g{color:var(--good)} .note .y{color:var(--hb)}
+  code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#cdd6f4}
+  .btnrow{display:flex;gap:8px}
+  .btnrow button{flex:1 1 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>渐近均分性与典型集 —— 概率如何集中到 2<sup>nH</sup> 条序列</h1>
+  <p>配套《第 5 章 渐近均分性与典型集》：几乎所有概率质量都落在指数级更小的<b>典型集</b>上 —— 这就是压缩的根源</p>
+</header>
+
+<div class="wrap">
+  <div class="stage">
+    <canvas id="cv"></canvas>
+    <div class="badge" id="badge"></div>
+    <div class="hint">拖动滑块即时更新 · 上：2<sup>n</sup> vs 2<sup>nH</sup> 对数对比条 · 中：随机抽样典型性 · 下：每符号经验熵直方图</div>
+  </div>
+
+  <aside class="panel">
+    <h2>信源 伯努利(p)</h2>
+    <div class="card">
+      <div class="row">
+        <label>偏置 p</label>
+        <input id="sP" type="range" min="0.02" max="0.98" step="0.01" value="0.85">
+        <span class="val" id="vP">0.85</span>
+      </div>
+      <div class="row">
+        <label>序列长度 n</label>
+        <input id="sN" type="range" min="2" max="600" step="1" value="40">
+        <span class="val" id="vN">40</span>
+      </div>
+      <div class="row">
+        <label>典型阈值 ε</label>
+        <input id="sE" type="range" min="0.02" max="0.5" step="0.01" value="0.12">
+        <span class="val" id="vE">0.12</span>
+      </div>
+      <div class="row">
+        <label>抽样条数</label>
+        <input id="sM" type="range" min="50" max="4000" step="50" value="1200">
+        <span class="val" id="vM">1200</span>
+      </div>
+      <div class="btnrow">
+        <button id="bReseed">重新抽样（换种子）</button>
+      </div>
+    </div>
+
+    <h2>实时读数</h2>
+    <div class="card" id="stats"></div>
+
+    <h2>显示</h2>
+    <div class="card toggles">
+      <label><input type="checkbox" id="tBars" checked> 对数对比条</label>
+      <label><input type="checkbox" id="tScatter" checked> 抽样典型性</label>
+      <label><input type="checkbox" id="tHist" checked> 经验熵直方图</label>
+      <label><input type="checkbox" id="tH" checked> 标注 H(p)</label>
+    </div>
+
+    <h2>图例</h2>
+    <div class="card legend">
+      <div><span class="bar" style="background:var(--full)"></span>全空间 2<sup>n</sup> 条 &nbsp;
+           <span class="bar" style="background:var(--typ)"></span>典型集 ≈2<sup>nH</sup> 条</div>
+      <div><span class="bar" style="background:var(--good);border-radius:50%;width:11px;height:11px"></span>落入典型集的样本 &nbsp;
+           <span class="bar" style="background:var(--bad);border-radius:50%;width:11px;height:11px"></span>非典型样本</div>
+      <div><span class="bar" style="background:var(--acc);width:3px;height:14px;border-radius:1px"></span>每符号熵 H(p)（直方图收紧的靶心）</div>
+    </div>
+
+    <h2>关键直觉</h2>
+    <div class="card note" id="notes"></div>
+  </aside>
+</div>
+
+<script>
+"use strict";
+
+/* ============ 确定性伪随机数（mulberry32），不用 Math.random ============ */
+function makePRNG(seed){
+  let a = seed >>> 0;
+  return function(){
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* ============ 信息论基础（log 以 2 为底 = bit） ============ */
+const LOG2 = Math.log(2);
+function log2(x){ return Math.log(x) / LOG2; }
+/* 二元熵 H_b(p) = -p log2 p - (1-p) log2(1-p)，单位 bit */
+function Hbin(p){
+  if(p<=0 || p>=1) return 0;
+  return -p*log2(p) - (1-p)*log2(1-p);
+}
+/* 含 k 个 1、长度 n 的伯努利(p) 序列：每符号经验熵 = -(1/n) log2 P(序列)
+   P = p^k (1-p)^(n-k)，故 -(1/n)log2 P = -(k/n)log2 p - ((n-k)/n)log2(1-p) */
+function perSymbolEntropy(k, n, p){
+  const f = k / n;
+  let s = 0;
+  if(p>0)   s += -f*log2(p);
+  if(1-p>0) s += -(1-f)*log2(1-p);
+  return s;
+}
+
+/* ============ 状态 ============ */
+const state = {
+  p: 0.85, n: 40, eps: 0.12, m: 1200, seed: 12345,
+};
+const show = { bars:true, scatter:true, hist:true, hmark:true };
+
+/* 抽一条长度 n 的 0/1 序列，返回其中 1 的个数 k（只需 k 即可决定经验熵与概率） */
+function sampleCountOfOnes(rng, n, p){
+  let k = 0;
+  for(let i=0;i<n;i++){ if(rng() < p) k++; }
+  return k;
+}
+
+/* 生成所有样本的 (k, perSymbolEntropy, typical?) */
+function drawSamples(){
+  const rng = makePRNG(state.seed);
+  const { n, p, eps, m } = state;
+  const H = Hbin(p);
+  const out = [];
+  let nTyp = 0;
+  for(let s=0;s<m;s++){
+    const k = sampleCountOfOnes(rng, n, p);
+    const h = perSymbolEntropy(k, n, p);
+    const typ = Math.abs(h - H) <= eps;
+    if(typ) nTyp++;
+    out.push({ k, h, typ });
+  }
+  return { samples: out, nTyp, frac: m>0 ? nTyp/m : 0 };
+}
+
+/* ============ Canvas ============ */
+const canvas = document.getElementById('cv');
+const ctx = canvas.getContext('2d');
+let W=0, Hpx=0;
+function resize(){
+  const r = canvas.getBoundingClientRect();
+  W = r.width; Hpx = r.height;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = W*dpr; canvas.height = Hpx*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+window.addEventListener('resize', ()=>{ resize(); draw(); });
+
+function hexA(hex, al){
+  const c = hex.replace('#','');
+  return `rgba(${parseInt(c.substr(0,2),16)},${parseInt(c.substr(2,2),16)},${parseInt(c.substr(4,2),16)},${al})`;
+}
+const CSSV = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+function roundRect(x,y,w,h,r){
+  r = Math.min(r, Math.abs(w)/2, Math.abs(h)/2);
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+function text(s,x,y,col,font,align,baseline){
+  ctx.font = font || '12px -apple-system,sans-serif';
+  ctx.textAlign = align || 'left';
+  ctx.textBaseline = baseline || 'alphabetic';
+  ctx.fillStyle = col;
+  ctx.fillText(s,x,y);
+}
+
+/* ============ 主绘制 ============ */
+let DRAW = null; // 缓存样本
+
+function recompute(){
+  DRAW = drawSamples();
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,Hpx);
+  if(W<10 || Hpx<10) return;
+
+  const COL = {
+    full: CSSV('--full'), typ: CSSV('--typ'), acc: CSSV('--acc'),
+    good: CSSV('--good'), bad: CSSV('--bad'), dim: CSSV('--dim'),
+    text: CSSV('--text'), line: CSSV('--line'),
+  };
+  const { p, n, eps } = state;
+  const H = Hbin(p);
+  const D = DRAW;
+
+  /* 三个区段的布局（自适应高度） */
+  const padL = 56, padR = 28, padT = 14;
+  const innerW = W - padL - padR;
+  const gap = 18;
+  // 可见区段
+  const segs = [];
+  if(show.bars)    segs.push('bars');
+  if(show.scatter) segs.push('scatter');
+  if(show.hist)    segs.push('hist');
+  if(segs.length===0){
+    text('（右侧已关闭全部显示项）', W/2, Hpx/2, COL.dim, '14px sans-serif','center','middle');
+    return;
+  }
+  // 权重：bars 矮一点，scatter/hist 高一点
+  const wmap = { bars: 0.62, scatter: 1.0, hist: 1.0 };
+  let totW = 0; segs.forEach(s=>totW += wmap[s]);
+  const avail = Hpx - padT - 14 - gap*(segs.length-1);
+  let y = padT;
+  const region = {};
+  for(const s of segs){
+    const h = avail * (wmap[s]/totW);
+    region[s] = { x: padL, y, w: innerW, h };
+    y += h + gap;
+  }
+
+  /* ---------- (1) 对数刻度对比条：2^n vs 2^{nH} ---------- */
+  if(show.bars){
+    const R = region.bars;
+    // 标题
+    text('① 序列空间：全空间 2ⁿ  vs  典型集 ≈ 2^{nH}（横轴 = 以 2 为底的对数 = 比特数）',
+         R.x, R.y+12, COL.text, '600 12.5px sans-serif');
+    const by0 = R.y + 26;
+    const barH = Math.min(26, (R.h-40)/2 - 8);
+    // 指数（位数）
+    const expFull = n * 1.0;     // log2(2^n) = n  （字母表 {0,1}，log2|A|=1）
+    const expTyp  = n * H;       // log2(2^{nH}) = nH
+    const maxExp  = Math.max(expFull, 1e-9);
+    const scale = innerW / maxExp;
+
+    const drawBar = (label, expv, col, yy, sub) => {
+      const bw = Math.max(2, expv * scale);
+      // 底槽
+      ctx.fillStyle = hexA(COL.line, 0.5);
+      roundRect(R.x, yy, innerW, barH, 5); ctx.fill();
+      // 实条
+      const g = ctx.createLinearGradient(R.x, 0, R.x+bw, 0);
+      g.addColorStop(0, hexA(col,0.55)); g.addColorStop(1, col);
+      ctx.fillStyle = g;
+      roundRect(R.x, yy, bw, barH, 5); ctx.fill();
+      // 左标签
+      text(label, R.x-8, yy+barH/2, col, '600 12px sans-serif','right','middle');
+      // 右侧数值
+      text(sub, R.x + Math.min(bw+8, innerW-4), yy+barH/2,
+           bw < innerW*0.55 ? COL.text : '#0d0f15',
+           '11.5px ui-monospace,monospace',
+           bw < innerW*0.55 ? 'left' : 'right', 'middle');
+    };
+    drawBar('2ⁿ', expFull, COL.full, by0,
+            `= 2^${n}  （${n} 位等长编码）`);
+    drawBar('2^{nH}', expTyp, COL.typ, by0 + barH + 10,
+            `= 2^${expTyp.toFixed(1)}  （≈ ${expTyp.toFixed(1)} 位）`);
+  }
+
+  /* ---------- (2) 抽样散点：经验频率 vs p，标记是否典型 ---------- */
+  if(show.scatter){
+    const R = region.scatter;
+    const fracPct = (D.frac*100).toFixed(1);
+    text(`② 随机抽 ${state.m} 条长度 n 的 0/1 序列：经验频率 k/n 与 p 的接近程度 → 是否典型（|经验熵−H|≤ε）`,
+         R.x, R.y+12, COL.text, '600 12.5px sans-serif');
+    text(`落入典型集的比例：${fracPct}%   （n 增大时 → 100%）`,
+         R.x, R.y+28, COL.good, '600 12px sans-serif');
+
+    const plotT = R.y + 40, plotB = R.y + R.h - 18, plotH = plotB - plotT;
+    const plotL = R.x, plotR = R.x + innerW;
+    // 坐标系：x = 经验频率 k/n ∈[0,1]；y = 经验熵（抖动可视化用 jitter）
+    // 用 y 表示每符号经验熵，范围 [0, maxH]
+    const maxH = Math.max(1.0, H + eps + 0.15);
+    const x2px = f => plotL + f*(plotR-plotL);
+    const h2py = h => plotB - (h/maxH)*plotH;
+
+    // 典型带（H±ε 在 y 轴上的水平带）
+    const yTop = h2py(Math.min(maxH, H+eps));
+    const yBot = h2py(Math.max(0, H-eps));
+    ctx.fillStyle = hexA(COL.typ, 0.10);
+    ctx.fillRect(plotL, yTop, plotR-plotL, yBot-yTop);
+    ctx.strokeStyle = hexA(COL.typ, 0.5); ctx.lineWidth=1; ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.moveTo(plotL,yTop); ctx.lineTo(plotR,yTop); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(plotL,yBot); ctx.lineTo(plotR,yBot); ctx.stroke();
+    ctx.setLineDash([]);
+    // H 线
+    const yH = h2py(H);
+    ctx.strokeStyle = hexA(COL.acc,0.85); ctx.lineWidth=1.6;
+    ctx.beginPath(); ctx.moveTo(plotL,yH); ctx.lineTo(plotR,yH); ctx.stroke();
+    text('H', plotR+2, yH, COL.acc, '11px sans-serif','left','middle');
+    // p 竖线（频率轴上的 p）
+    const xp = x2px(p);
+    ctx.strokeStyle = hexA(COL.acc,0.55); ctx.lineWidth=1; ctx.setLineDash([3,4]);
+    ctx.beginPath(); ctx.moveTo(xp,plotT); ctx.lineTo(xp,plotB); ctx.stroke();
+    ctx.setLineDash([]);
+    text('p', xp, plotT-2, COL.acc,'11px sans-serif','center','bottom');
+
+    // 散点（用确定性 jitter，基于样本索引，不用 Math.random）
+    const jr = makePRNG(state.seed ^ 0x9e3779b9);
+    for(const s of D.samples){
+      const f = s.k / n;
+      const x = x2px(f) + (jr()-0.5)*3;   // 轻微 x 抖动避免重叠
+      const yj = h2py(s.h);
+      ctx.fillStyle = s.typ ? hexA(COL.good,0.55) : hexA(COL.bad,0.5);
+      ctx.beginPath(); ctx.arc(x, yj, s.typ?2.0:1.8, 0, 7); ctx.fill();
+    }
+    // 轴标
+    text('0', plotL, plotB+12, COL.dim, '10px sans-serif','center','top');
+    text('1', plotR, plotB+12, COL.dim, '10px sans-serif','center','top');
+    text('经验频率 k/n →', (plotL+plotR)/2, plotB+12, COL.dim, '10px sans-serif','center','top');
+    text('经验熵', plotL-46, plotT+8, COL.dim, '10px sans-serif','left','top');
+  }
+
+  /* ---------- (3) 每符号经验熵直方图：随 n 收紧到 H ---------- */
+  if(show.hist){
+    const R = region.hist;
+    text('③ 每符号经验熵 −(1/n)·log₂P(序列) 的直方图：n 越大越收紧到 H(p)',
+         R.x, R.y+12, COL.text, '600 12.5px sans-serif');
+
+    const plotT = R.y + 24, plotB = R.y + R.h - 18, plotH = plotB - plotT;
+    const plotL = R.x, plotR = R.x + innerW;
+    const maxH = Math.max(1.0, H + 0.4); // x 轴上限（比特）
+    const x2px = h => plotL + (h/maxH)*(plotR-plotL);
+
+    // 分箱
+    const NB = 60;
+    const bins = new Array(NB).fill(0);
+    let maxCount = 1;
+    for(const s of D.samples){
+      let b = Math.floor((s.h/maxH)*NB);
+      if(b<0) b=0; if(b>=NB) b=NB-1;
+      bins[b]++;
+    }
+    for(const c of bins) if(c>maxCount) maxCount=c;
+
+    const bw = (plotR-plotL)/NB;
+    for(let i=0;i<NB;i++){
+      if(bins[i]===0) continue;
+      const hgt = (bins[i]/maxCount)*plotH;
+      const bx = plotL + i*bw;
+      // 该箱中心熵值，落在典型带内则用典型色
+      const hc = (i+0.5)/NB*maxH;
+      const inTyp = Math.abs(hc - H) <= eps;
+      ctx.fillStyle = inTyp ? hexA(COL.typ,0.85) : hexA(COL.full,0.7);
+      ctx.fillRect(bx+0.5, plotB-hgt, Math.max(1,bw-1), hgt);
+    }
+    // H 靶心竖线
+    if(show.hmark){
+      const xH = x2px(H);
+      ctx.strokeStyle = COL.acc; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(xH,plotT-4); ctx.lineTo(xH,plotB); ctx.stroke();
+      text(`H(p)=${H.toFixed(3)} bit`, xH, plotT-6, COL.acc, '600 11px sans-serif','center','bottom');
+      // ε 带
+      const xL = x2px(Math.max(0,H-eps)), xR = x2px(Math.min(maxH,H+eps));
+      ctx.fillStyle = hexA(COL.typ,0.08);
+      ctx.fillRect(xL, plotT, xR-xL, plotB-plotT);
+    }
+    // 全 1 / 全 0 序列的经验熵标记（最可能单序列往往不典型）
+    const hAll1 = perSymbolEntropy(n, n, p); // k=n -> -log2 p
+    const xa = x2px(Math.min(maxH, hAll1));
+    if(hAll1 <= maxH){
+      ctx.strokeStyle = hexA(COL.bad,0.85); ctx.lineWidth=1.4; ctx.setLineDash([3,3]);
+      ctx.beginPath(); ctx.moveTo(xa,plotT+4); ctx.lineTo(xa,plotB); ctx.stroke();
+      ctx.setLineDash([]);
+      text('全1串', xa, plotB-2, COL.bad, '10px sans-serif','center','bottom');
+    }
+    // x 轴刻度
+    ctx.strokeStyle = hexA(COL.line,0.8); ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(plotL,plotB); ctx.lineTo(plotR,plotB); ctx.stroke();
+    for(let t=0;t<=maxH+1e-9;t+=0.5){
+      const tx = x2px(t);
+      ctx.beginPath(); ctx.moveTo(tx,plotB); ctx.lineTo(tx,plotB+4); ctx.stroke();
+      text(t.toFixed(1), tx, plotB+6, COL.dim,'10px sans-serif','center','top');
+    }
+    text('每符号比特数 →', plotR, plotB+6, COL.dim,'10px sans-serif','right','top');
+  }
+}
+
+/* ============ 统计读数 / 文案 ============ */
+function fmtBig(exp){
+  // 给出 2^exp 的科学计数法近似
+  const log10 = exp * Math.log10(2);
+  const e = Math.floor(log10);
+  const mant = Math.pow(10, log10 - e);
+  if(e < 6) return Math.round(Math.pow(2,exp)).toLocaleString('en-US');
+  return `${mant.toFixed(2)}×10^${e}`;
+}
+function renderStats(){
+  const { p, n, eps } = state;
+  const H = Hbin(p);
+  const D = DRAW;
+  const expFull = n;          // log2(2^n)
+  const expTyp  = n*H;        // log2(2^{nH})
+  const ratioExp = expTyp - expFull; // = n(H-1) ≤ 0
+  // 典型序列 H 个数的均值与标准差（理论）
+  const mu = p*n, sd = Math.sqrt(n*p*(1-p));
+  const rows = [
+    ['每符号熵 H(p)', `<b>${H.toFixed(4)}</b> bit`],
+    ['字母表上限 log₂|A|', `1.0000 bit`],
+    ['全空间 2ⁿ', `2^${n} ≈ ${fmtBig(expFull)}`],
+    ['典型集 2^{nH}', `2^${expTyp.toFixed(1)} ≈ ${fmtBig(expTyp)}`],
+    ['典型集占比 2^{n(H−1)}', `2^${ratioExp.toFixed(1)} ≈ ${ratioExp<-1? fmtBig(ratioExp):Math.pow(2,ratioExp).toFixed(3)}`],
+    ['抽样落入典型集', `<b>${(D.frac*100).toFixed(1)}%</b>  (${D.nTyp}/${state.m})`],
+    ['典型带 H±ε', `[${Math.max(0,H-eps).toFixed(3)}, ${(H+eps).toFixed(3)}]`],
+    ['典型序列 k/n≈p', `${p.toFixed(2)} ± ${(sd/n).toFixed(3)} (1σ)`],
+  ];
+  document.getElementById('stats').innerHTML =
+    rows.map(r=>`<div class="stat"><span>${r[0]}</span><span>${r[1]}</span></div>`).join('');
+}
+function renderBadge(){
+  const { p, n } = state;
+  const H = Hbin(p);
+  const b = document.getElementById('badge');
+  const comp = (1 - H/1) ; // 相对压缩比例（字母表上限=1）
+  b.innerHTML = `伯努利(p=${p.toFixed(2)}) · n=${n} · <b>H=${H.toFixed(3)} bit</b> · `
+    + `典型集仅占全空间 2^{${(n*(H-1)).toFixed(1)}} · 可压去 ${(comp*100).toFixed(0)}%`;
+}
+function renderNotes(){
+  const H = Hbin(state.p).toFixed(3);
+  document.getElementById('notes').innerHTML =
+    `<p>把 <b class="a">p</b> 设成强偏置（如 0.9），再把 <b>n</b> 从 2 慢慢拉到 600：</p>
+     <p>① <b class="t">对数对比条</b>：两条都随 n 变长，但 <b class="t">2^{nH}</b> 始终短于 <b style="color:var(--full)">2ⁿ</b>——差额 n(1−H) 就是<b>能压掉的位数</b>。</p>
+     <p>② <b class="g">抽样典型性</b>：散点的经验频率 k/n 越来越紧地夹住 <b class="a">p</b>，落入<b class="t">典型带</b>（H±ε）的比例随 n <b>趋近 100%</b>。</p>
+     <p>③ <b>经验熵直方图</b>：−(1/n)log₂P 的分布随 n 不断<b>收紧到 H(p)=${H} bit</b>（<b class="a">橙色靶心</b>）。这就是 AEP 的动画版。</p>
+     <p>留意红色虚线 <b style="color:var(--bad)">"全1串"</b>：它是概率最大的<b>单条</b>序列，却落在直方图左侧、<b>不典型</b>——典型 ≠ 最可能。</p>
+     <p>把 p 调回 0.5：H=1=log₂|A|，典型集 = 全空间，直方图退化成一根钉子——<b>均匀分布无可压缩性</b>。</p>
+     <p><b>结论：</b>几乎全部概率质量落在指数级更小的典型集（≈2^{nH} 条）上 —— <b class="y">这正是压缩的根源</b>。</p>`;
+}
+
+/* ============ 刷新管线 ============ */
+function refresh(full){
+  if(full) recompute();
+  draw();
+  renderStats();
+  renderBadge();
+}
+
+/* ============ UI 绑定 ============ */
+const sP=document.getElementById('sP'), vP=document.getElementById('vP');
+const sN=document.getElementById('sN'), vN=document.getElementById('vN');
+const sE=document.getElementById('sE'), vE=document.getElementById('vE');
+const sM=document.getElementById('sM'), vM=document.getElementById('vM');
+
+sP.addEventListener('input', e=>{ state.p=+e.target.value; vP.textContent=state.p.toFixed(2); refresh(true); });
+sN.addEventListener('input', e=>{ state.n=+e.target.value; vN.textContent=state.n; refresh(true); });
+sE.addEventListener('input', e=>{ state.eps=+e.target.value; vE.textContent=state.eps.toFixed(2); refresh(true); });
+sM.addEventListener('input', e=>{ state.m=+e.target.value; vM.textContent=state.m; refresh(true); });
+document.getElementById('bReseed').addEventListener('click', ()=>{
+  state.seed = (state.seed * 1664525 + 1013904223) >>> 0; // 确定性推进种子
+  refresh(true);
+});
+
+const bind=(id,key)=>document.getElementById(id).addEventListener('change',e=>{ show[key]=e.target.checked; draw(); });
+bind('tBars','bars'); bind('tScatter','scatter'); bind('tHist','hist'); bind('tH','hmark');
+
+/* ============ 启动 ============ */
+resize();
+renderNotes();
+refresh(true);
+</script>
+</body>
+</html>

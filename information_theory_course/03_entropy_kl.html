@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>熵与 KL 散度 —— 不确定性与“分布间距离” · 配套第 3、4 章</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a24; --panel2:#1f2330; --line:#2b3040;
+    --text:#e7e9f0; --dim:#9aa0b4; --p:#f5a623; --q:#22c7d6; --hi:#ffd166; --kl:#ef6b73;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;}
+  header{padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{margin:0;font-size:18px;letter-spacing:.5px}
+  header p{margin:4px 0 0;color:var(--dim);font-size:13px}
+  .wrap{display:flex;height:calc(100% - 62px);min-height:0}
+  .stage{position:relative;flex:1 1 auto;min-width:0;background:radial-gradient(circle at 50% 40%,#161a26 0%,#0d0f15 80%);overflow-y:auto}
+  canvas{display:block;width:100%}
+  .panel{flex:0 0 380px;max-width:48%;overflow-y:auto;border-left:1px solid var(--line);background:var(--panel);padding:16px}
+  .panel h2{font-size:14px;margin:18px 0 8px;color:#fff}
+  .panel h2:first-child{margin-top:0}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+  .modes{display:flex;gap:8px}
+  .modes button{flex:1 1 0;padding:9px 6px;font-size:13px;line-height:1.4}
+  .modes button.on{border-color:transparent;color:#0d0f15;font-weight:700}
+  .modes button.on.p{background:var(--p)}
+  .modes button.on.q{background:var(--q)}
+  button{background:#262b3a;color:var(--text);border:1px solid var(--line);border-radius:8px;
+    padding:7px 11px;font-size:13px;cursor:pointer}
+  button:hover{filter:brightness(1.12)}
+  .row{display:flex;align-items:center;gap:10px;margin:9px 0}
+  .row label{flex:0 0 70px;font-weight:600;font-size:13px}
+  .row label.p{color:var(--p)} .row label.q{color:var(--q)}
+  input[type=range]{flex:1 1 auto}
+  #sP{accent-color:var(--p)} #sQ{accent-color:var(--q)} #sP2{accent-color:var(--p)}
+  .val{flex:0 0 56px;text-align:right;font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px}
+  .stat{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px dashed #2b3040}
+  .stat:last-child{border-bottom:none}
+  .stat span:last-child{color:#fff;font-variant-numeric:tabular-nums}
+  .stat .kl{color:var(--kl)!important}
+  .stat .inf{color:var(--hi)!important}
+  .note{font-size:12.6px;color:var(--dim);line-height:1.8}
+  .note b{color:#e7e9f0}
+  .note .cp{color:var(--p)} .note .cq{color:var(--q)} .note .ck{color:var(--kl)} .note .cy{color:var(--hi)}
+  code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#cdd6f4}
+  .legend{font-size:12.5px;color:var(--dim);line-height:1.95}
+  .legend .bar{display:inline-block;width:16px;height:9px;border-radius:3px;margin-right:6px;vertical-align:middle}
+  .hint{font-size:12px;color:var(--dim);margin:2px 0 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>熵与 KL 散度 —— 不确定性与“分布间距离”</h1>
+  <p>配套《第 3 章 熵》与《第 4 章 KL 散度与互信息》：用<b>二元伯努利分布</b>把熵、自信息、KL、交叉熵一次看懂（log 以 2 为底＝bit）</p>
+</header>
+
+<div class="wrap">
+  <div class="stage">
+    <canvas id="cvH"></canvas>
+    <canvas id="cvB"></canvas>
+  </div>
+
+  <aside class="panel">
+    <h2>视图</h2>
+    <div class="card">
+      <div class="modes">
+        <button id="vEnt"  class="p on" data-v="ent">① 二元熵 H(p)</button>
+        <button id="vKL"   class="q"    data-v="kl">② KL 与交叉熵</button>
+      </div>
+      <p class="hint" id="vHint">拖动滑块，曲线与读数即时更新。</p>
+    </div>
+
+    <div id="paneEnt">
+      <h2>参数</h2>
+      <div class="card">
+        <div class="row">
+          <label class="p">p</label>
+          <input id="sP2" type="range" min="0.001" max="0.999" step="0.001" value="0.5">
+          <span class="val" id="vP2">0.500</span>
+        </div>
+        <p class="hint">p ＝事件发生（“正面”）的概率；1−p ＝不发生。</p>
+      </div>
+
+      <h2>实时读数（bit）</h2>
+      <div class="card" id="statsEnt"></div>
+    </div>
+
+    <div id="paneKL" style="display:none">
+      <h2>两个伯努利分布</h2>
+      <div class="card">
+        <div class="row">
+          <label class="p">真实 p</label>
+          <input id="sP" type="range" min="0.001" max="0.999" step="0.001" value="0.7">
+          <span class="val" id="vP">0.700</span>
+        </div>
+        <div class="row">
+          <label class="q">模型 q</label>
+          <input id="sQ" type="range" min="0.001" max="0.999" step="0.001" value="0.4">
+          <span class="val" id="vQ">0.400</span>
+        </div>
+        <p class="hint"><b style="color:var(--p)">p</b>＝真实分布，<b style="color:var(--q)">q</b>＝我们用来近似它的模型分布。</p>
+      </div>
+
+      <h2>实时读数（bit）</h2>
+      <div class="card" id="statsKL"></div>
+
+      <h2>图例</h2>
+      <div class="card legend">
+        <div><span class="bar" style="background:var(--p)"></span>真实分布 p &nbsp;
+             <span class="bar" style="background:var(--q)"></span>模型分布 q</div>
+      </div>
+    </div>
+
+    <h2>关键直觉</h2>
+    <div class="card note" id="notes"></div>
+  </aside>
+</div>
+
+<script>
+"use strict";
+
+/* ============ 信息论核心计算（log 以 2 为底＝bit）============ */
+const log2 = x => Math.log(x)/Math.LN2;
+// 二元熵 H(p) = -p log2 p - (1-p) log2 (1-p)，约定 0·log0 = 0
+function Hbin(p){
+  let s=0;
+  if(p>0) s -= p*log2(p);
+  if(p<1) s -= (1-p)*log2(1-p);
+  return s;
+}
+// 自信息 -log2 x
+function selfInfo(x){ return x>0 ? -log2(x) : Infinity; }
+// 两个伯努利分布的 KL：D(a||b) = Σ a·log2(a/b)，约定 0·log0=0；a>0 而 b=0 → ∞
+function klBin(a,b){
+  let s=0;
+  // 事件发生这一侧：质量 a，模型 b
+  if(a>0){ if(b<=0) return Infinity; s += a*log2(a/b); }
+  // 不发生这一侧：质量 1-a，模型 1-b
+  if(1-a>0){ if(1-b<=0) return Infinity; s += (1-a)*log2((1-a)/(1-b)); }
+  return s;
+}
+const fmt = v => (v===Infinity ? '∞' : v.toFixed(3));
+
+/* ============ Canvas 基础 ============ */
+const cvH=document.getElementById('cvH'), ctxH=cvH.getContext('2d');
+const cvB=document.getElementById('cvB'), ctxB=cvB.getContext('2d');
+let dpr=window.devicePixelRatio||1;
+
+function sizeCanvas(cv,ctx,cssW,cssH){
+  dpr=window.devicePixelRatio||1;
+  cv.style.width=cssW+'px'; cv.style.height=cssH+'px';
+  cv.width=Math.round(cssW*dpr); cv.height=Math.round(cssH*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+function stageW(){ return document.querySelector('.stage').clientWidth; }
+
+/* ============ 视图 ① 二元熵曲线 ============ */
+function drawEntropy(){
+  const Wcss=Math.max(360, stageW()-24);
+  const Hcss=Math.max(360, Math.min(560, Wcss*0.62));
+  sizeCanvas(cvH,ctxH,Wcss,Hcss);
+  const ctx=ctxH, W=Wcss, H=Hcss;
+  ctx.clearRect(0,0,W,H);
+
+  const m={l:64,r:24,t:30,b:48};
+  const gx=W-m.l-m.r, gy=H-m.t-m.b;
+  const X = p => m.l + p*gx;            // p ∈ [0,1]
+  const Y = h => m.t + (1 - h/1)*gy;    // H ∈ [0,1] bit
+
+  // 背景网格
+  ctx.lineWidth=1;
+  ctx.font='11px -apple-system,sans-serif'; ctx.fillStyle='#8b91a6';
+  ctx.textAlign='right'; ctx.textBaseline='middle';
+  for(let h=0;h<=1.0001;h+=0.25){
+    const y=Y(h);
+    ctx.strokeStyle='#232838'; ctx.beginPath(); ctx.moveTo(m.l,y); ctx.lineTo(W-m.r,y); ctx.stroke();
+    ctx.fillText(h.toFixed(2), m.l-8, y);
+  }
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  for(let p=0;p<=1.0001;p+=0.1){
+    const x=X(p);
+    ctx.strokeStyle='#1c2030'; ctx.beginPath(); ctx.moveTo(x,m.t); ctx.lineTo(x,H-m.b); ctx.stroke();
+    ctx.fillStyle='#8b91a6'; ctx.fillText(p.toFixed(1), x, H-m.b+8);
+  }
+  // 坐标轴
+  ctx.strokeStyle='#3a4258'; ctx.lineWidth=1.4;
+  ctx.beginPath(); ctx.moveTo(m.l,m.t); ctx.lineTo(m.l,H-m.b); ctx.lineTo(W-m.r,H-m.b); ctx.stroke();
+  ctx.fillStyle='#c7ccdb'; ctx.textAlign='center';
+  ctx.fillText('p （事件概率）', m.l+gx/2, H-22);
+  ctx.save(); ctx.translate(20,m.t+gy/2); ctx.rotate(-Math.PI/2);
+  ctx.fillText('H(p)  熵 / bit', 0, 0); ctx.restore();
+
+  // p=0.5 处最大值参考线
+  ctx.setLineDash([4,4]); ctx.strokeStyle='rgba(255,209,102,.5)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(m.l,Y(1)); ctx.lineTo(W-m.r,Y(1)); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(X(0.5),m.t); ctx.lineTo(X(0.5),H-m.b); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='#ffd166'; ctx.textAlign='left'; ctx.textBaseline='bottom';
+  ctx.font='12px -apple-system,sans-serif';
+  ctx.fillText('最大熵 = 1 bit（p = 0.5）', X(0.5)+8, Y(1)-4);
+
+  // 熵曲线
+  ctx.beginPath();
+  for(let i=0;i<=400;i++){
+    const p=i/400, x=X(p), y=Y(Hbin(p));
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.lineWidth=2.6; ctx.strokeStyle='#f5a623'; ctx.lineCap='round'; ctx.stroke();
+
+  // 当前点
+  const p=ENT.p, hp=Hbin(p);
+  const px=X(p), py=Y(hp);
+  ctx.setLineDash([3,4]); ctx.strokeStyle='rgba(245,166,35,.6)'; ctx.lineWidth=1.2;
+  ctx.beginPath(); ctx.moveTo(px,H-m.b); ctx.lineTo(px,py); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(m.l,py); ctx.lineTo(px,py); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(px,py,5.5,0,7); ctx.fill();
+  ctx.fillStyle='#f5a623'; ctx.beginPath(); ctx.arc(px,py,3.5,0,7); ctx.fill();
+
+  // 当前点读数气泡
+  ctx.font='600 12px -apple-system,sans-serif';
+  const txt = `p=${p.toFixed(3)}   H(p)=${hp.toFixed(3)} bit`;
+  ctx.textAlign='center'; ctx.textBaseline='bottom';
+  const tw=ctx.measureText(txt).width;
+  let bx=px, by=py-12;
+  if(by<m.t+18) by=py+30;
+  ctx.fillStyle='rgba(15,17,23,.85)';
+  ctx.strokeStyle='#2b3040'; ctx.lineWidth=1;
+  const bw=tw+18, bh=20;
+  let rx=Math.min(Math.max(bx-bw/2,m.l), W-m.r-bw);
+  roundRect(ctx,rx,by-bh,bw,bh,6); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='#ffe6ad'; ctx.fillText(txt, rx+bw/2, by-3);
+}
+function roundRect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+
+/* ============ 视图 ② 两分布柱状图 ============ */
+function drawBars(){
+  const Wcss=Math.max(360, stageW()-24);
+  const Hcss=Math.max(360, Math.min(520, Wcss*0.58));
+  sizeCanvas(cvB,ctxB,Wcss,Hcss);
+  const ctx=ctxB, W=Wcss, H=Hcss;
+  ctx.clearRect(0,0,W,H);
+
+  const m={l:56,r:24,t:30,b:54};
+  const gy=H-m.t-m.b;
+  const Y = pr => m.t + (1-pr)*gy;
+
+  // y 轴刻度
+  ctx.font='11px -apple-system,sans-serif'; ctx.textAlign='right'; ctx.textBaseline='middle';
+  for(let v=0;v<=1.0001;v+=0.25){
+    const y=Y(v);
+    ctx.strokeStyle='#232838'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(m.l,y); ctx.lineTo(W-m.r,y); ctx.stroke();
+    ctx.fillStyle='#8b91a6'; ctx.fillText(v.toFixed(2), m.l-8, y);
+  }
+  ctx.strokeStyle='#3a4258'; ctx.lineWidth=1.4;
+  ctx.beginPath(); ctx.moveTo(m.l,m.t); ctx.lineTo(m.l,H-m.b); ctx.lineTo(W-m.r,H-m.b); ctx.stroke();
+  ctx.save(); ctx.translate(18,m.t+gy/2); ctx.rotate(-Math.PI/2);
+  ctx.fillStyle='#c7ccdb'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('概率', 0, 0); ctx.restore();
+
+  // 两组柱：事件 X=1（发生）与 X=0（不发生）
+  const p=KL.p, q=KL.q;
+  const groups=[
+    {name:'X = 1（发生）', pv:p,   qv:q  },
+    {name:'X = 0（不发生）', pv:1-p, qv:1-q},
+  ];
+  const gx0=m.l, gxw=W-m.l-m.r;
+  const bw=Math.min(70, gxw*0.16);
+  const gap=14;
+  groups.forEach((g,i)=>{
+    const cx = gx0 + gxw*(i+0.5)/2;
+    const xP = cx - bw - gap/2;
+    const xQ = cx + gap/2;
+    // p 柱
+    drawBar(ctx,xP,Y(g.pv),bw,(H-m.b)-Y(g.pv),'#f5a623',g.pv);
+    // q 柱
+    drawBar(ctx,xQ,Y(g.qv),bw,(H-m.b)-Y(g.qv),'#22c7d6',g.qv);
+    // 组标签
+    ctx.fillStyle='#c7ccdb'; ctx.font='12px -apple-system,sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillText(g.name, cx, H-m.b+8);
+  });
+
+  // 标题图例
+  ctx.font='600 12px -apple-system,sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle='#f5a623'; ctx.fillRect(m.l, 8, 14, 9);
+  ctx.fillStyle='#c7ccdb'; ctx.fillText('真实 p', m.l+20, 7);
+  ctx.fillStyle='#22c7d6'; ctx.fillRect(m.l+78, 8, 14, 9);
+  ctx.fillStyle='#c7ccdb'; ctx.fillText('模型 q', m.l+98, 7);
+}
+function drawBar(ctx,x,y,w,h,col,val){
+  if(h<0.5)h=0.5;
+  const g=ctx.createLinearGradient(x,y,x,y+h);
+  g.addColorStop(0, col);
+  g.addColorStop(1, shade(col,0.55));
+  ctx.fillStyle=g; roundRect(ctx,x,y,w,h,4); ctx.fill();
+  ctx.strokeStyle='rgba(0,0,0,.35)'; ctx.lineWidth=1; ctx.stroke();
+  ctx.fillStyle='#fff'; ctx.font='600 12px -apple-system,sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='bottom';
+  ctx.fillText(val.toFixed(3), x+w/2, y-3);
+}
+function shade(hex,t){const c=hex.replace('#','');const r=parseInt(c.substr(0,2),16),g=parseInt(c.substr(2,2),16),b=parseInt(c.substr(4,2),16);
+  return `rgb(${Math.round(r*t)},${Math.round(g*t)},${Math.round(b*t)})`;}
+
+/* ============ 读数面板 ============ */
+function renderEntStats(){
+  const p=ENT.p;
+  const rows=[
+    ['熵 H(p)', Hbin(p).toFixed(3)+' bit', ''],
+    ['自信息 −log₂ p （事件发生）', fmt(selfInfo(p))+' bit', 'inf'],
+    ['自信息 −log₂(1−p) （不发生）', fmt(selfInfo(1-p))+' bit', 'inf'],
+    ['距最大熵的差 1−H(p)', (1-Hbin(p)).toFixed(3)+' bit', ''],
+  ];
+  document.getElementById('statsEnt').innerHTML = rows.map(r=>
+    `<div class="stat"><span>${r[0]}</span><span class="${r[2]}">${r[1]}</span></div>`).join('');
+}
+function renderKLStats(){
+  const p=KL.p, q=KL.q;
+  const Hp=Hbin(p);
+  const dpq=klBin(p,q);   // D(p||q)
+  const dqp=klBin(q,p);   // D(q||p)
+  const Hpq=(dpq===Infinity)?Infinity:Hp+dpq; // 交叉熵 H(p,q)=H(p)+D(p||q)
+  const rows=[
+    ['真实熵 H(p)', Hp.toFixed(3)+' bit', ''],
+    ['模型熵 H(q)', Hbin(q).toFixed(3)+' bit', ''],
+    ['KL 散度 D(p ‖ q)', fmt(dpq)+' bit', 'kl'],
+    ['KL 散度 D(q ‖ p)', fmt(dqp)+' bit', 'kl'],
+    ['交叉熵 H(p,q) = H(p)+D(p‖q)', fmt(Hpq)+' bit', ''],
+    ['不对称差 D(p‖q)−D(q‖p)',
+       (dpq===Infinity||dqp===Infinity)?'∞':(dpq-dqp).toFixed(3)+' bit', ''],
+  ];
+  document.getElementById('statsKL').innerHTML = rows.map(r=>
+    `<div class="stat"><span>${r[0]}</span><span class="${r[2]}">${r[1]}</span></div>`).join('');
+}
+
+/* ============ 文字说明 ============ */
+const NOTE_ENT = `
+  <p><b class="cp">二元熵 H(p)</b> 衡量“抛一枚偏心硬币”结果的<b>平均不确定性</b>。它是事件发生概率 p 的函数，单位 <b>bit</b>。</p>
+  <p>曲线在 <b class="cy">p = 0.5</b> 处取到唯一最大值 <b>1 bit</b>——两种结果完全均等、最难猜；越偏向 0 或 1，熵越小，趋近 <b>0 bit</b>（几乎确定，没有不确定性）。</p>
+  <p><b>自信息</b> <code>−log₂ p</code> 是某个具体结果带来的“惊讶程度”：越罕见的事件信息量越大。熵正是自信息按概率的<b>加权平均</b>：<code>H(p)=p·(−log₂p)+(1−p)·(−log₂(1−p))</code>。</p>`;
+const NOTE_KL = `
+  <p><b class="ck">KL 散度 D(p‖q)</b>＝<b>用模型 q 去“假装”真实分布 p 时，每个符号多付出的平均比特数</b>。它度量两个分布有多“不像”。</p>
+  <p>关键性质：① 恒 <b>≥ 0</b>，当且仅当 <b class="cp">p</b>＝<b class="cq">q</b> 时为 0；② <b>不对称</b>：<code>D(p‖q) ≠ D(q‖p)</code>——所以它不是真正的“距离”；③ 当 q 在某处为 0 而 p 不为 0 时，代价为 <b>∞</b>（把 q 拖到边上试试，读数会跳到 ∞）。</p>
+  <p><b>交叉熵</b> <code>H(p,q)=H(p)+D(p‖q)</code>：用 q 编码 p 的总比特数 ＝ 不可压的真实熵 H(p) ＋ 浪费的 KL。因为 H(p) 与模型无关，<b>最小化交叉熵 ⇔ 最小化 KL ⇔ 最大似然</b>——这正是分类任务用交叉熵损失的根本原因。</p>`;
+function renderNotes(){ document.getElementById('notes').innerHTML = (VIEW==='ent')?NOTE_ENT:NOTE_KL; }
+
+/* ============ 状态 & UI ============ */
+let VIEW='ent';
+const ENT={p:0.5};
+const KL ={p:0.7,q:0.4};
+
+function redraw(){
+  if(VIEW==='ent'){ cvH.style.display='block'; cvB.style.display='none'; drawEntropy(); renderEntStats(); }
+  else            { cvH.style.display='none';  cvB.style.display='block'; drawBars();   renderKLStats(); }
+}
+function setView(v){
+  VIEW=v;
+  document.querySelectorAll('.modes button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  document.getElementById('paneEnt').style.display = (v==='ent')?'':'none';
+  document.getElementById('paneKL').style.display  = (v==='kl')?'':'none';
+  document.getElementById('vHint').textContent = (v==='ent')
+    ? '拖动滑块改变 p，曲线上的当前点、H(p) 与自信息即时更新。'
+    : '分别拖动 p、q，柱状图与 KL / 交叉熵读数即时更新。';
+  renderNotes(); redraw();
+}
+document.querySelectorAll('.modes button').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.v)));
+
+const sP2=document.getElementById('sP2'), vP2=document.getElementById('vP2');
+sP2.addEventListener('input',e=>{ ENT.p=+e.target.value; vP2.textContent=ENT.p.toFixed(3); redraw(); });
+
+const sP=document.getElementById('sP'), vP=document.getElementById('vP');
+sP.addEventListener('input',e=>{ KL.p=+e.target.value; vP.textContent=KL.p.toFixed(3); redraw(); });
+const sQ=document.getElementById('sQ'), vQ=document.getElementById('vQ');
+sQ.addEventListener('input',e=>{ KL.q=+e.target.value; vQ.textContent=KL.q.toFixed(3); redraw(); });
+
+window.addEventListener('resize',()=>redraw());
+setView('ent');
+</script>
+</body>
+</html>

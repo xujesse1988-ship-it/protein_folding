@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>二元对称信道的容量 —— C = 1 − H(p) · 配套第 7 章</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a24; --panel2:#1f2330; --line:#2b3040;
+    --text:#e7e9f0; --dim:#9aa0b4; --in:#f5a623; --out:#22c7d6; --cap:#ffd166;
+    --mi:#a78bfa; --flip:#ef6b73;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;}
+  header{padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{margin:0;font-size:18px;letter-spacing:.5px}
+  header p{margin:4px 0 0;color:var(--dim);font-size:13px}
+  header p b{color:#e7e9f0}
+  .wrap{display:flex;height:calc(100% - 62px);min-height:0}
+  .stage{position:relative;flex:1 1 auto;min-width:0;overflow-y:auto;
+    background:radial-gradient(circle at 50% 30%,#161a26 0%,#0d0f15 80%)}
+  canvas{display:block;width:100%}
+  .panel{flex:0 0 380px;max-width:48%;overflow-y:auto;border-left:1px solid var(--line);background:var(--panel);padding:16px}
+  .panel h2{font-size:14px;margin:18px 0 8px;color:#fff}
+  .panel h2:first-child{margin-top:0}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+  button{background:#262b3a;color:var(--text);border:1px solid var(--line);border-radius:8px;
+    padding:7px 11px;font-size:13px;cursor:pointer}
+  button:hover{filter:brightness(1.12)}
+  .btns{display:flex;flex-wrap:wrap;gap:8px}
+  .row{display:flex;align-items:center;gap:10px;margin:11px 0}
+  .row label{flex:0 0 84px;font-weight:600;font-size:13px}
+  .row label.p{color:var(--flip)} .row label.pi{color:var(--in)}
+  input[type=range]{flex:1 1 auto}
+  #sP{accent-color:var(--flip)} #sPi{accent-color:var(--in)}
+  .val{flex:0 0 62px;text-align:right;font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px}
+  .stat{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px dashed #2b3040}
+  .stat:last-child{border-bottom:none}
+  .stat span:last-child{color:#fff;font-variant-numeric:tabular-nums}
+  .stat .cap{color:var(--cap)!important}
+  .stat .mi{color:var(--mi)!important}
+  .stat .flip{color:var(--flip)!important}
+  .note{font-size:12.6px;color:var(--dim);line-height:1.8}
+  .note b{color:#e7e9f0}
+  .note .ci{color:var(--in)} .note .co{color:var(--out)} .note .cc{color:var(--cap)}
+  .note .cm{color:var(--mi)} .note .cf{color:var(--flip)}
+  code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#cdd6f4}
+  .legend{font-size:12.5px;color:var(--dim);line-height:1.95}
+  .legend .bar{display:inline-block;width:16px;height:9px;border-radius:3px;margin-right:6px;vertical-align:middle}
+  .legend .dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:6px;vertical-align:middle}
+</style>
+</head>
+<body>
+<header>
+  <h1>二元对称信道的容量 —— <b>C = 1 − H(p)</b></h1>
+  <p>配套《第 7 章 信道容量》：拖动翻转概率 <b>p</b> 与输入分布 <b>π=P(X=1)</b>，直观体会
+     “<b>容量 = 对输入分布取最大的互信息</b>”（log 以 2 为底＝bit）</p>
+</header>
+
+<div class="wrap">
+  <div class="stage">
+    <canvas id="cvBSC"></canvas>
+    <canvas id="cvCap"></canvas>
+    <canvas id="cvMI"></canvas>
+  </div>
+
+  <aside class="panel">
+    <h2>参数</h2>
+    <div class="card">
+      <div class="row">
+        <label class="p">翻转概率 p</label>
+        <input id="sP" type="range" min="0" max="0.5" step="0.001" value="0.1">
+        <span class="val" id="vP">0.100</span>
+      </div>
+      <div class="row">
+        <label class="pi">输入 π=P(X=1)</label>
+        <input id="sPi" type="range" min="0" max="1" step="0.001" value="0.5">
+        <span class="val" id="vPi">0.500</span>
+      </div>
+      <div class="btns">
+        <button id="bReset">重置 (p=0.1, π=0.5)</button>
+        <button id="bPi5">π → 0.5（取到容量）</button>
+        <button id="bP0">p → 0（无噪声）</button>
+        <button id="bP5">p → 0.5（完全失效）</button>
+      </div>
+    </div>
+
+    <h2>实时读数</h2>
+    <div class="card" id="stats"></div>
+
+    <h2>图例</h2>
+    <div class="card legend">
+      <div><span class="dot" style="background:var(--in)"></span>输入 X &nbsp;
+           <span class="dot" style="background:var(--out)"></span>输出 Y</div>
+      <div><span class="bar" style="background:var(--flip)"></span>翻转边（概率 p）&nbsp;
+           <span class="bar" style="background:#6b7180"></span>不翻转边（概率 1−p）</div>
+      <div><span class="bar" style="background:var(--cap)"></span>容量曲线 C(p)=1−H(p)</div>
+      <div><span class="bar" style="background:var(--mi)"></span>互信息曲线 I(X;Y) 关于 π</div>
+    </div>
+
+    <h2>关键直觉</h2>
+    <div class="card note" id="notes"></div>
+  </aside>
+</div>
+
+<script>
+"use strict";
+
+/* ============ 数学：以 2 为底的对数 → bit ============ */
+const log2 = x => Math.log(x)/Math.LN2;
+// 二元熵函数 H(p) = -p log2 p - (1-p) log2(1-p)，约定 0 log 0 = 0
+function Hbin(p){
+  if(p<=0 || p>=1) return 0;
+  return -p*log2(p) - (1-p)*log2(1-p);
+}
+// 一般离散熵（接受概率数组）
+function Hvec(ps){
+  let s=0;
+  for(const q of ps){ if(q>0) s -= q*log2(q); }
+  return s;
+}
+/* BSC 互信息：
+   输入 X∈{0,1}，P(X=1)=π；翻转概率 p。
+   输出边缘 P(Y=1) = π(1-p) + (1-π)p。
+   I(X;Y) = H(Y) - H(Y|X) = H(P(Y=1)) - H(p)。
+   （因为给定 X 时 Y 只是以概率 p 翻转，故 H(Y|X)=H(p) 与 π 无关。）*/
+function mutualInfo(pi, p){
+  const py1 = pi*(1-p) + (1-pi)*p;
+  return Hbin(py1) - Hbin(p);
+}
+
+/* ============ 当前状态 ============ */
+let P = 0.1;   // 翻转概率
+let PI = 0.5;  // 输入分布 P(X=1)
+
+/* ============ 画布 ============ */
+const cvBSC = document.getElementById('cvBSC');
+const cvCap = document.getElementById('cvCap');
+const cvMI  = document.getElementById('cvMI');
+const ctxBSC= cvBSC.getContext('2d');
+const ctxCap= cvCap.getContext('2d');
+const ctxMI = cvMI.getContext('2d');
+
+function fitCanvas(cv, ctx, cssH){
+  const dpr = window.devicePixelRatio||1;
+  const cssW = cv.clientWidth || cv.parentElement.clientWidth;
+  cv.style.height = cssH+'px';
+  cv.width  = Math.round(cssW*dpr);
+  cv.height = Math.round(cssH*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {w:cssW, h:cssH};
+}
+
+/* ============ 颜色工具 ============ */
+function hexA(hex,al){const c=hex.replace('#','');
+  return `rgba(${parseInt(c.substr(0,2),16)},${parseInt(c.substr(2,2),16)},${parseInt(c.substr(4,2),16)},${al})`;}
+const COL={in:'#f5a623',out:'#22c7d6',cap:'#ffd166',mi:'#a78bfa',flip:'#ef6b73',keep:'#6b7180',grid:'#2b3040',dim:'#9aa0b4',text:'#e7e9f0'};
+
+/* ============ (1) BSC 转移图 ============ */
+function drawBSC(){
+  const {w,h}=fitCanvas(cvBSC,ctxBSC,320);
+  const c=ctxBSC;
+  c.clearRect(0,0,w,h);
+
+  // 标题
+  c.font='600 14px -apple-system,sans-serif'; c.textAlign='left'; c.textBaseline='top';
+  c.fillStyle=COL.text;
+  c.fillText('① 二元对称信道 (BSC) 转移图', 18, 14);
+  c.font='12px -apple-system,sans-serif'; c.fillStyle=COL.dim;
+  c.fillText('输入以概率 p 翻转 · 边的粗细 ∝ 转移概率', 18, 34);
+
+  const lx = w*0.30, rx = w*0.70;     // 左列(X)、右列(Y) x 坐标
+  const yTop = 110, yBot = 250;       // 节点 y
+  const R = 26;
+
+  // 边：先画（在节点下方）
+  const edges=[
+    {x1:lx,y1:yTop,x2:rx,y2:yTop, prob:1-P, col:COL.keep, lab:'1−p'}, // 0->0
+    {x1:lx,y1:yBot,x2:rx,y2:yBot, prob:1-P, col:COL.keep, lab:'1−p'}, // 1->1
+    {x1:lx,y1:yTop,x2:rx,y2:yBot, prob:P,   col:COL.flip, lab:'p'},   // 0->1 翻转
+    {x1:lx,y1:yBot,x2:rx,y2:yTop, prob:P,   col:COL.flip, lab:'p'},   // 1->0 翻转
+  ];
+  // 先翻转后保持，使保持边压在上层更清晰
+  for(const e of [edges[2],edges[3],edges[0],edges[1]]){
+    const lw = 1.5 + e.prob*11;
+    // 起讫点收缩到圆边
+    const dx=e.x2-e.x1, dy=e.y2-e.y1, L=Math.hypot(dx,dy)||1, ux=dx/L, uy=dy/L;
+    const sx=e.x1+ux*R, sy=e.y1+uy*R, ex=e.x2-ux*(R+8), ey=e.y2-uy*(R+8);
+    c.lineCap='round';
+    c.strokeStyle=hexA(e.col, 0.25+0.55*e.prob);
+    c.lineWidth=lw;
+    c.beginPath(); c.moveTo(sx,sy); c.lineTo(ex,ey); c.stroke();
+    // 箭头
+    c.fillStyle=hexA(e.col, 0.35+0.6*e.prob);
+    const a=8;
+    const nx=-uy, ny=ux;
+    c.beginPath();
+    c.moveTo(ex+ux*a, ey+uy*a);
+    c.lineTo(ex-ux*a+nx*a*0.6, ey-uy*a+ny*a*0.6);
+    c.lineTo(ex-ux*a-nx*a*0.6, ey-uy*a-ny*a*0.6);
+    c.closePath(); c.fill();
+    // 概率标签（边中点附近）
+    const mx=(sx+ex)/2, my=(sy+ey)/2;
+    c.font='600 12.5px ui-monospace,monospace';
+    c.fillStyle=e.col;
+    c.textAlign='center'; c.textBaseline='middle';
+    let off = (e.lab==='p') ? -10 : 12;
+    // 给翻转边的标签更靠中间避免重叠
+    c.fillText(e.lab+' = '+(e.prob.toFixed(3)), mx, my+off);
+  }
+
+  // 节点
+  function node(x,y,txt,col){
+    const g=c.createRadialGradient(x-R*0.35,y-R*0.35,R*0.1,x,y,R);
+    g.addColorStop(0, hexA(col,0.9)); g.addColorStop(1, hexA(col,0.45));
+    c.fillStyle=g; c.beginPath(); c.arc(x,y,R,0,7); c.fill();
+    c.lineWidth=2; c.strokeStyle=hexA(col,0.95); c.stroke();
+    c.fillStyle='#0d0f15'; c.font='700 17px ui-monospace,monospace';
+    c.textAlign='center'; c.textBaseline='middle';
+    c.fillText(txt,x,y);
+  }
+  node(lx,yTop,'0',COL.in);
+  node(lx,yBot,'1',COL.in);
+  node(rx,yTop,'0',COL.out);
+  node(rx,yBot,'1',COL.out);
+
+  // 列标题与分布注释
+  c.font='600 13px -apple-system,sans-serif'; c.textAlign='center'; c.textBaseline='alphabetic';
+  c.fillStyle=COL.in;  c.fillText('输入 X', lx, yTop-R-16);
+  c.fillStyle=COL.out; c.fillText('输出 Y', rx, yTop-R-16);
+
+  const py1 = PI*(1-P)+(1-PI)*P;
+  c.font='12px ui-monospace,monospace'; c.textAlign='left';
+  c.fillStyle=COL.in;
+  c.fillText('P(X=0)='+(1-PI).toFixed(3), lx-R, yTop+R+22);
+  c.fillText('P(X=1)='+PI.toFixed(3),     lx-R, yBot+R+22);
+  c.textAlign='right'; c.fillStyle=COL.out;
+  c.fillText('P(Y=0)='+(1-py1).toFixed(3), rx+R, yTop+R+22);
+  c.fillText('P(Y=1)='+py1.toFixed(3),     rx+R, yBot+R+22);
+}
+
+/* ============ 通用坐标轴 ============ */
+function drawAxes(c, box, xLab, yLab, xMax, yMax){
+  const {x0,y0,x1,y1}=box;
+  c.strokeStyle=COL.grid; c.lineWidth=1;
+  // 网格
+  c.font='10.5px ui-monospace,monospace'; c.fillStyle=COL.dim;
+  for(let i=0;i<=5;i++){
+    const gx = x0 + (x1-x0)*i/5;
+    c.strokeStyle=hexA('#2b3040',0.8); c.beginPath(); c.moveTo(gx,y0); c.lineTo(gx,y1); c.stroke();
+    c.textAlign='center'; c.textBaseline='top';
+    c.fillText((xMax*i/5).toFixed(xMax<=1?1:0), gx, y1+4);
+  }
+  for(let j=0;j<=4;j++){
+    const gy = y1 - (y1-y0)*j/4;
+    c.strokeStyle=hexA('#2b3040',0.8); c.beginPath(); c.moveTo(x0,gy); c.lineTo(x1,gy); c.stroke();
+    c.textAlign='right'; c.textBaseline='middle';
+    c.fillText((yMax*j/4).toFixed(2), x0-6, gy);
+  }
+  // 轴
+  c.strokeStyle=COL.dim; c.lineWidth=1.4;
+  c.beginPath(); c.moveTo(x0,y0); c.lineTo(x0,y1); c.lineTo(x1,y1); c.stroke();
+  // 标签
+  c.fillStyle=COL.text; c.font='600 12px -apple-system,sans-serif';
+  c.textAlign='center'; c.textBaseline='top'; c.fillText(xLab,(x0+x1)/2, y1+20);
+  c.save();
+  c.translate(x0-40,(y0+y1)/2); c.rotate(-Math.PI/2);
+  c.textBaseline='bottom'; c.fillText(yLab,0,0); c.restore();
+}
+
+/* ============ (2) 容量曲线 C(p)=1−H(p) ============ */
+function drawCap(){
+  const {w,h}=fitCanvas(cvCap,ctxCap,300);
+  const c=ctxCap;
+  c.clearRect(0,0,w,h);
+  c.font='600 14px -apple-system,sans-serif'; c.textAlign='left'; c.textBaseline='top';
+  c.fillStyle=COL.text; c.fillText('② 容量 C = 1 − H(p) 关于翻转概率 p', 18, 12);
+
+  const box={x0:64, y0:48, x1:w-30, y1:h-46};
+  const xMax=0.5, yMax=1;
+  drawAxes(c, box, 'p（翻转概率）', 'C (bit)', xMax, yMax);
+  const X=p=> box.x0 + (box.x1-box.x0)*(p/xMax);
+  const Y=v=> box.y1 - (box.y1-box.y0)*(v/yMax);
+
+  // 曲线
+  c.strokeStyle=COL.cap; c.lineWidth=2.5; c.lineJoin='round';
+  c.beginPath();
+  for(let i=0;i<=240;i++){
+    const p=xMax*i/240, v=1-Hbin(p);
+    if(i===0) c.moveTo(X(p),Y(v)); else c.lineTo(X(p),Y(v));
+  }
+  c.stroke();
+  // 区域填充
+  c.lineTo(X(xMax),Y(0)); c.lineTo(X(0),Y(0)); c.closePath();
+  c.fillStyle=hexA(COL.cap,0.10); c.fill();
+
+  // 端点标注 (0,1) 与 (0.5,0)
+  function endpt(p,v,txt){
+    c.fillStyle=hexA(COL.cap,0.9); c.beginPath(); c.arc(X(p),Y(v),3.5,0,7); c.fill();
+    c.font='11px ui-monospace,monospace'; c.fillStyle=COL.dim;
+    c.textAlign='left'; c.textBaseline='bottom'; c.fillText(txt, X(p)+(p<0.25?6:-58), Y(v)+(v>0.5?-4:-4));
+  }
+  endpt(0,1,'p=0 → C=1');
+  endpt(0.5,0,'p=0.5 → C=0');
+
+  // 当前点
+  const cv = 1-Hbin(P);
+  const cx=X(P), cy=Y(cv);
+  c.strokeStyle=hexA(COL.flip,0.5); c.setLineDash([4,4]); c.lineWidth=1;
+  c.beginPath(); c.moveTo(cx,Y(0)); c.lineTo(cx,cy); c.lineTo(box.x0,cy); c.stroke();
+  c.setLineDash([]);
+  c.fillStyle=COL.flip; c.beginPath(); c.arc(cx,cy,5.5,0,7); c.fill();
+  c.strokeStyle='#0d0f15'; c.lineWidth=1.5; c.stroke();
+  c.font='600 12px ui-monospace,monospace'; c.fillStyle=COL.flip;
+  c.textAlign=(P<0.4?'left':'right'); c.textBaseline='bottom';
+  c.fillText('当前 p='+P.toFixed(3)+',C='+cv.toFixed(3), cx+(P<0.4?9:-9), cy-7);
+}
+
+/* ============ (3) 互信息曲线 I(X;Y) 关于 π ============ */
+function drawMI(){
+  const {w,h}=fitCanvas(cvMI,ctxMI,300);
+  const c=ctxMI;
+  c.clearRect(0,0,w,h);
+  c.font='600 14px -apple-system,sans-serif'; c.textAlign='left'; c.textBaseline='top';
+  c.fillStyle=COL.text;
+  c.fillText('③ 固定 p='+P.toFixed(3)+'：互信息 I(X;Y) 关于输入分布 π', 18, 12);
+
+  const cap = 1-Hbin(P); // 当前 p 下的容量 = I 的最大值（在 π=0.5）
+  const box={x0:64, y0:48, x1:w-30, y1:h-46};
+  const xMax=1;
+  const yMax = Math.max(0.05, Math.ceil(cap*20)/20 || 0.05); // 纵轴上限随容量自适应，至少留点空间
+  const yTop = Math.max(yMax, 0.05);
+  drawAxes(c, box, 'π = P(X=1)', 'I (bit)', xMax, yTop);
+  const X=pi=> box.x0 + (box.x1-box.x0)*(pi/xMax);
+  const Y=v => box.y1 - (box.y1-box.y0)*(v/yTop);
+
+  // 容量水平参考线 C
+  if(cap>1e-6){
+    c.strokeStyle=hexA(COL.cap,0.7); c.setLineDash([6,4]); c.lineWidth=1.6;
+    c.beginPath(); c.moveTo(box.x0,Y(cap)); c.lineTo(box.x1,Y(cap)); c.stroke();
+    c.setLineDash([]);
+    c.font='600 11px ui-monospace,monospace'; c.fillStyle=COL.cap;
+    c.textAlign='left'; c.textBaseline='bottom';
+    c.fillText('C = max I = 1−H(p) = '+cap.toFixed(3), box.x0+6, Y(cap)-3);
+  }
+
+  // I(π) 曲线
+  c.strokeStyle=COL.mi; c.lineWidth=2.5; c.lineJoin='round';
+  c.beginPath();
+  for(let i=0;i<=240;i++){
+    const pi=xMax*i/240, v=Math.max(0,mutualInfo(pi,P));
+    if(i===0) c.moveTo(X(pi),Y(v)); else c.lineTo(X(pi),Y(v));
+  }
+  c.stroke();
+  c.lineTo(X(1),Y(0)); c.lineTo(X(0),Y(0)); c.closePath();
+  c.fillStyle=hexA(COL.mi,0.10); c.fill();
+
+  // 最大点 π=0.5
+  const peakX=X(0.5), peakY=Y(cap);
+  c.fillStyle=hexA(COL.cap,0.9); c.beginPath(); c.arc(peakX,peakY,4,0,7); c.fill();
+  c.font='11px ui-monospace,monospace'; c.fillStyle=COL.dim;
+  c.textAlign='center'; c.textBaseline='top'; c.fillText('π=0.5 处取最大', peakX, peakY+8);
+
+  // 当前 π 点
+  const iv = Math.max(0,mutualInfo(PI,P));
+  const cx=X(PI), cy=Y(iv);
+  c.strokeStyle=hexA(COL.in,0.55); c.setLineDash([4,4]); c.lineWidth=1;
+  c.beginPath(); c.moveTo(cx,Y(0)); c.lineTo(cx,cy); c.lineTo(box.x0,cy); c.stroke();
+  c.setLineDash([]);
+  c.fillStyle=COL.in; c.beginPath(); c.arc(cx,cy,5.5,0,7); c.fill();
+  c.strokeStyle='#0d0f15'; c.lineWidth=1.5; c.stroke();
+  c.font='600 12px ui-monospace,monospace'; c.fillStyle=COL.in;
+  c.textAlign=(PI<0.5?'left':'right'); c.textBaseline='bottom';
+  c.fillText('当前 π='+PI.toFixed(3)+',I='+iv.toFixed(3), cx+(PI<0.5?9:-9), cy-7);
+}
+
+/* ============ 读数 ============ */
+function renderStats(){
+  const cap = 1-Hbin(P);
+  const py1 = PI*(1-P)+(1-PI)*P;
+  const HX  = Hbin(PI);          // 输入熵
+  const HY  = Hbin(py1);         // 输出熵
+  const HYX = Hbin(P);           // H(Y|X) = H(p)，与 π 无关
+  const I   = Math.max(0, HY-HYX);
+  const rows=[
+    ['翻转概率 p', P.toFixed(4), 'flip'],
+    ['信道噪声 H(p) = H(Y|X)', HYX.toFixed(4)+' bit', ''],
+    ['容量 C = 1 − H(p)', cap.toFixed(4)+' bit', 'cap'],
+    ['——', '', ''],
+    ['输入分布 π = P(X=1)', PI.toFixed(4), ''],
+    ['输入熵 H(X)', HX.toFixed(4)+' bit', ''],
+    ['输出边缘 P(Y=1)', py1.toFixed(4), ''],
+    ['输出熵 H(Y)', HY.toFixed(4)+' bit', ''],
+    ['互信息 I(X;Y) = H(Y)−H(p)', I.toFixed(4)+' bit', 'mi'],
+    ['距容量差 C − I', (cap-I).toFixed(4)+' bit', ''],
+  ];
+  document.getElementById('stats').innerHTML = rows.map(r=>{
+    if(r[0]==='——') return '<div class="stat" style="border-bottom:1px solid #2b3040;padding:2px 0"></div>';
+    const cls = r[2] ? ` class="${r[2]}"` : '';
+    return `<div class="stat"><span>${r[0]}</span><span${cls}>${r[1]}</span></div>`;
+  }).join('');
+}
+
+function renderNotes(){
+  document.getElementById('notes').innerHTML = `
+  <p><b>二元对称信道 (BSC)</b>：每个比特独立地以<b class="cf">翻转概率 p</b> 出错（0→1 或 1→0），以 <code>1−p</code> 正确通过。它是最简单也最常用的噪声信道模型。</p>
+  <p>关键恒等式 <code>I(X;Y) = H(Y) − H(Y|X)</code>。由于给定输入后 Y 只是以概率 p 翻转，
+     <b>H(Y|X) = H(p)</b> 只取决于信道、<b>与输入分布 π 无关</b>。所以提高互信息只能靠抬高 <b class="co">H(Y)</b>，
+     而 H(Y) 在输出对半开（<code>P(Y=1)=0.5</code>）时最大，对 BSC 这恰好对应 <b class="ci">π=0.5</b>。</p>
+  <p>于是 <b>容量</b> = 对所有输入分布取最大的互信息：
+     <code>C = max<sub>π</sub> I(X;Y) = 1 − H(p)</code>（图 ②）。两个极端很好记：
+     <b class="cc">p=0</b> 无噪声 → C=1 bit；<b class="cf">p=0.5</b> 输出与输入无关 → C=0。</p>
+  <p>图 ③ 固定一个 p，画出 <b class="cm">I(X;Y)</b> 如何随 <b class="ci">π</b> 变化：它是一条在 <b>π=0.5</b> 处封顶的凹曲线，
+     封顶值正好落在图 ② 的容量水平线 <b class="cc">C</b> 上——这就把“容量 = 对输入分布取最大的互信息”看在了眼里。</p>
+  <p>试一试：把 p 调到 0.5，③ 的曲线被压平贴地（无论怎么选 π 都传不出信息）；把 p 调到 0，曲线变成标准二元熵 H(π)，峰值 1 bit。</p>`;
+}
+
+/* ============ 重绘 ============ */
+function redraw(){
+  drawBSC(); drawCap(); drawMI(); renderStats();
+}
+
+/* ============ UI ============ */
+const sP=document.getElementById('sP'),  vP=document.getElementById('vP');
+const sPi=document.getElementById('sPi'),vPi=document.getElementById('vPi');
+sP.addEventListener('input',e=>{ P=+e.target.value; vP.textContent=P.toFixed(3); redraw(); });
+sPi.addEventListener('input',e=>{ PI=+e.target.value; vPi.textContent=PI.toFixed(3); redraw(); });
+
+function setP(v){ P=v; sP.value=v; vP.textContent=P.toFixed(3); }
+function setPi(v){ PI=v; sPi.value=v; vPi.textContent=PI.toFixed(3); }
+document.getElementById('bReset').addEventListener('click',()=>{ setP(0.1); setPi(0.5); redraw(); });
+document.getElementById('bPi5').addEventListener('click',()=>{ setPi(0.5); redraw(); });
+document.getElementById('bP0').addEventListener('click',()=>{ setP(0); redraw(); });
+document.getElementById('bP5').addEventListener('click',()=>{ setP(0.5); redraw(); });
+
+window.addEventListener('resize',redraw);
+renderNotes();
+redraw();
+</script>
+</body>
+</html>
