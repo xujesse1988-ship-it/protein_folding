@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SVD 几何 + PCA 点云 · 圆→椭圆的旋转-拉伸-旋转 · 点云主成分 —— 配套第 8 章</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a24; --panel2:#1f2330; --line:#2b3040;
+    --text:#e7e9f0; --dim:#9aa0b4;
+    --orange:#f5a623;  /* 矩阵 A / 第一主成分 / 椭圆 */
+    --cyan:#22c7d6;    /* U 左奇异向量 / 第二主成分 */
+    --yellow:#ffd166;  /* V 右奇异向量 / 数据点 */
+    --red:#ef6b73;     /* 拉伸 Σ / 残差 */
+    --green:#7bd88f;   /* 命中 / 投影 / 直角标记 */
+    --violet:#b388ff;  /* 辅助 */
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;}
+  header{padding:13px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{margin:0;font-size:18px;letter-spacing:.3px}
+  header h1 .c{color:var(--cyan)} header h1 .o{color:var(--orange)} header h1 .y{color:var(--yellow)} header h1 .r{color:var(--red)}
+  header p{margin:5px 0 0;color:var(--dim);font-size:13px;line-height:1.65}
+  header p b{color:#fff} header p code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#cdd6f4}
+  .tabs{display:flex;gap:8px;padding:10px 20px 0;background:var(--panel);border-bottom:1px solid var(--line)}
+  .tabs button{background:#20242f;color:var(--dim);border:1px solid var(--line);border-bottom:none;
+    border-radius:9px 9px 0 0;padding:9px 15px;font-size:13.5px;cursor:pointer;font-weight:600}
+  .tabs button.active{background:var(--bg);color:#fff;border-color:var(--line)}
+  .tabs button:hover{filter:brightness(1.15)}
+  .wrap{display:flex;height:calc(100% - 84px - 46px);min-height:0}
+  .stage{position:relative;flex:1 1 auto;min-width:0;overflow:hidden;
+    background:radial-gradient(circle at 48% 46%,#161a26 0%,#0d0f15 84%)}
+  canvas{display:block;width:100%;height:100%}
+  #cv1{cursor:default} #cv2{cursor:crosshair}
+  .legend{position:absolute;left:14px;top:12px;font-size:12.5px;pointer-events:none;
+    background:rgba(15,17,23,.62);padding:8px 11px;border-radius:8px;border:1px solid var(--line);line-height:1.95}
+  .legend .ln{display:inline-block;width:18px;height:0;border-top:3px solid;margin-right:6px;vertical-align:middle}
+  .legend .dt{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .hint{position:absolute;left:14px;bottom:12px;color:var(--dim);font-size:12px;pointer-events:none;
+    background:rgba(15,17,23,.55);padding:6px 10px;border-radius:8px;border:1px solid var(--line);max-width:660px;line-height:1.6}
+  .hint b{color:#e7e9f0}
+  .panel{flex:0 0 440px;max-width:55%;overflow-y:auto;border-left:1px solid var(--line);background:var(--panel);padding:16px}
+  .panel h2{font-size:14px;margin:18px 0 8px;color:#fff}
+  .panel h2:first-child{margin-top:0}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+  button.b{background:#262b3a;color:var(--text);border:1px solid var(--line);border-radius:8px;
+    padding:7px 11px;font-size:13px;cursor:pointer}
+  button.b:hover{filter:brightness(1.13)}
+  .row{display:flex;align-items:center;gap:10px;margin:9px 0}
+  .row label{flex:0 0 86px;font-weight:600;font-size:13px}
+  input[type=range]{flex:1 1 auto;accent-color:var(--cyan)}
+  .val{flex:0 0 58px;text-align:right;font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px}
+  .stat{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px dashed #2b3040;gap:8px}
+  .stat:last-child{border-bottom:none}
+  .stat span:last-child{color:#fff;font-variant-numeric:tabular-nums;text-align:right}
+  .note{font-size:12.5px;color:var(--dim);line-height:1.85}
+  .note b{color:#e7e9f0}
+  .note .o{color:var(--orange)} .note .c{color:var(--cyan)} .note .y{color:var(--yellow)}
+  .note .v{color:var(--violet)} .note .r{color:var(--red)} .note .g{color:var(--green)}
+  code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#cdd6f4}
+  .presets{display:flex;flex-wrap:wrap;gap:6px}
+  .presets button{flex:1 1 30%;font-size:12px;padding:6px 4px}
+  .mat{display:flex;align-items:center;gap:6px;justify-content:center;margin:8px 0 4px;font-variant-numeric:tabular-nums}
+  .mat .brk{font-size:46px;color:var(--dim);font-weight:200;line-height:.8}
+  .mat .col{display:flex;flex-direction:column;gap:6px}
+  .mat .cell{width:54px;text-align:center;font-size:13.5px}
+  .mat .lab{font-size:13px;color:var(--dim);margin-right:2px;min-width:18px}
+  .view{display:none;height:100%}
+  .view.active{display:flex}
+  .seg{display:flex;gap:0;margin:4px 0 0}
+  .seg button{flex:1 1 33%;background:#20242f;color:var(--dim);border:1px solid var(--line);
+    padding:7px 4px;font-size:12.5px;cursor:pointer;font-weight:600}
+  .seg button:first-child{border-radius:8px 0 0 8px}
+  .seg button:last-child{border-radius:0 8px 8px 0}
+  .seg button:not(:first-child){border-left:none}
+  .seg button.on{background:#2d3650;color:#fff;border-color:#3a4564}
+  .chk{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;margin:9px 0}
+  .chk input{transform:scale(1.25)}
+  .bar{height:10px;border-radius:5px;background:#10131b;overflow:hidden;margin:4px 0;border:1px solid var(--line)}
+  .bar i{display:block;height:100%}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="o">SVD 几何</span>（圆→椭圆：<span class="y">Vᵀ 旋</span> → <span class="r">Σ 拉</span> → <span class="c">U 旋</span>） + <span class="o">PCA 点云</span></h1>
+  <p>配套《线性代数深度入门》<b>第 8 章「奇异值分解与主成分分析」</b>。核心直觉一句话：<b>任意矩阵 A = UΣVᵀ，几何上无非「输入端转一下 Vᵀ → 沿坐标轴各自拉伸 Σ → 输出端再转一下 U」，把单位圆映成椭圆（半轴长 = 奇异值 σᵢ）</b>；而 <b>PCA = 中心化数据的 SVD = 协方差的特征分解</b>，主方向就是右奇异向量。左标签对应 <code>§8.1 圆变椭圆</code>，右标签对应 <code>§8.5 PCA = 数据 SVD</code>。折叠连接：<b>MD 轨迹 PCA（essential dynamics）</b>用前几个主成分抓住主要构象运动，<b>Kabsch 算法</b>用 SVD 求最优旋转把两个蛋白结构叠合（RMSD 的根）。</p>
+</header>
+<div class="tabs">
+  <button id="tab1" class="active" onclick="showTab(1)">① SVD 几何：圆变椭圆（§8.1.2）</button>
+  <button id="tab2" onclick="showTab(2)">② PCA 点云（§8.5）</button>
+</div>
+
+<!-- ============ VIEW 1: SVD geometry ============ -->
+<div id="view1" class="view active wrap">
+  <div class="stage">
+    <canvas id="cv1"></canvas>
+    <div class="legend">
+      <div><span class="ln" style="border-color:#5b6276"></span>单位圆 + 标准基（输入）</div>
+      <div><span class="ln" style="border-color:var(--orange)"></span><b style="color:var(--orange)">A 作用后</b>的椭圆（像）</div>
+      <div><span class="ln" style="border-color:var(--yellow)"></span><b style="color:var(--yellow)">右奇异向量 v₁,v₂</b>（输入端正交方向）</div>
+      <div><span class="ln" style="border-color:var(--cyan)"></span><b style="color:var(--cyan)">左奇异向量 u₁,u₂</b>（输出端椭圆半轴方向）</div>
+      <div><span class="dt" style="background:var(--red)"></span>奇异值 σ₁,σ₂ = 椭圆<b>半轴长</b></div>
+    </div>
+    <div class="hint"><b>动手（§8.1.2）：</b>拖动滑杆改变矩阵 <code>A</code> 的四个元素，或点 <b>预设</b>。点「<b>分步动画</b>」看 <span style="color:var(--yellow)">Vᵀ 把圆先转正</span> → <span style="color:var(--red)">Σ 沿坐标轴拉伸成正椭圆</span> → <span style="color:var(--cyan)">U 把椭圆转到最终朝向</span>。注意：<b>v₁ 是 A 把谁拉得最长的输入方向，它被映到 u₁ 方向、放大 σ₁ 倍</b>（灵魂方程 A vᵢ = σᵢ uᵢ）。</div>
+  </div>
+  <div class="panel">
+    <h2>矩阵 A（2×2）</h2>
+    <div class="card">
+      <div class="row"><label>a₁₁</label><input id="a11" type="range" min="-3" max="3" step="0.02" value="1.6"><div class="val" id="va11">1.60</div></div>
+      <div class="row"><label>a₁₂</label><input id="a12" type="range" min="-3" max="3" step="0.02" value="0.9"><div class="val" id="va12">0.90</div></div>
+      <div class="row"><label>a₂₁</label><input id="a21" type="range" min="-3" max="3" step="0.02" value="0.2"><div class="val" id="va21">0.20</div></div>
+      <div class="row"><label>a₂₂</label><input id="a22" type="range" min="-3" max="3" step="0.02" value="1.2"><div class="val" id="va22">1.20</div></div>
+      <div class="presets" style="margin-top:4px">
+        <button class="b" onclick="presetA('rot')">纯旋转</button>
+        <button class="b" onclick="presetA('scale')">纯拉伸</button>
+        <button class="b" onclick="presetA('shear')">剪切</button>
+        <button class="b" onclick="presetA('singular')">奇异(σ₂≈0)</button>
+        <button class="b" onclick="presetA('reset')">复位</button>
+      </div>
+      <div style="margin-top:8px;display:flex;gap:6px;align-items:center">
+        <button class="b" id="animBtn" onclick="toggleAnim()" style="flex:1 1 auto">▶ 分步动画 Vᵀ→Σ→U</button>
+      </div>
+      <div class="seg" style="margin-top:8px">
+        <button id="st0" class="on" onclick="setStep(0)">合成 A</button>
+        <button id="st1" onclick="setStep(1)">Vᵀ 旋</button>
+        <button id="st2" onclick="setStep(2)">Σ 拉</button>
+        <button id="st3" onclick="setStep(3)">U 旋</button>
+      </div>
+    </div>
+
+    <h2>SVD：A = U Σ Vᵀ</h2>
+    <div class="card">
+      <div class="mat">
+        <span class="lab">U</span><span class="brk">[</span>
+        <div class="col"><div class="cell" id="U00">–</div><div class="cell" id="U10">–</div></div>
+        <div class="col"><div class="cell" id="U01">–</div><div class="cell" id="U11">–</div></div>
+        <span class="brk">]</span>
+      </div>
+      <div class="mat">
+        <span class="lab">Σ</span><span class="brk">[</span>
+        <div class="col"><div class="cell" id="S00" style="color:var(--red)">–</div><div class="cell">0</div></div>
+        <div class="col"><div class="cell">0</div><div class="cell" id="S11" style="color:var(--red)">–</div></div>
+        <span class="brk">]</span>
+      </div>
+      <div class="mat">
+        <span class="lab">Vᵀ</span><span class="brk">[</span>
+        <div class="col"><div class="cell" id="VT00">–</div><div class="cell" id="VT10">–</div></div>
+        <div class="col"><div class="cell" id="VT01">–</div><div class="cell" id="VT11">–</div></div>
+        <span class="brk">]</span>
+      </div>
+    </div>
+
+    <h2>读数</h2>
+    <div class="card">
+      <div class="stat"><span>σ₁ (最大奇异值 = ‖A‖₂)</span><span id="rd_s1">–</span></div>
+      <div class="stat"><span>σ₂ (最小奇异值)</span><span id="rd_s2">–</span></div>
+      <div class="stat"><span>条件数 κ = σ₁/σ₂</span><span id="rd_kappa">–</span></div>
+      <div class="stat"><span>v₁ 角度（输入主拉伸方向）</span><span id="rd_va">–</span></div>
+      <div class="stat"><span>u₁ 角度（输出椭圆长轴）</span><span id="rd_ua">–</span></div>
+      <div class="stat"><span>|det A| = σ₁σ₂（面积缩放）</span><span id="rd_det">–</span></div>
+      <div class="stat"><span>正交校验 ‖UᵀU−I‖+‖VᵀV−I‖</span><span id="rd_orth">–</span></div>
+      <div class="stat"><span>重构校验 ‖UΣVᵀ−A‖</span><span id="rd_recon">–</span></div>
+    </div>
+    <div class="card note">
+      <b>正文呼应（§8.1）：</b>把单位圆喂给 A，输出永远是椭圆——因为 A = <span class="c">U</span><span class="r">Σ</span><span class="y">Vᵀ</span> 三步都保形或保轴：<span class="y">Vᵀ 是旋转/反射</span>（圆还是圆）、<span class="r">Σ 沿两坐标轴各拉伸 σ₁,σ₂ 倍</span>（圆变正椭圆）、<span class="c">U 又是旋转/反射</span>（正椭圆转到最终朝向）。<b>椭圆半轴长 = 奇异值 σᵢ</b>，半轴方向 = 左奇异向量 <span class="c">uᵢ</span>，它们的原像 = 右奇异向量 <span class="y">vᵢ</span>。灵魂方程 <b>A vᵢ = σᵢ uᵢ</b>。σ₂≈0 时椭圆塌成线段（矩阵奇异、把一个方向碾平为 0）。
+    </div>
+  </div>
+</div>
+
+<!-- ============ VIEW 2: PCA point cloud ============ -->
+<div id="view2" class="view wrap">
+  <div class="stage">
+    <canvas id="cv2"></canvas>
+    <div class="legend">
+      <div><span class="dt" style="background:var(--yellow)"></span>数据点（点击添加 / 右键删 / 可拖）</div>
+      <div><span class="dt" style="background:var(--green)"></span><b style="color:var(--green)">均值 μ</b>（点云质心）</div>
+      <div><span class="ln" style="border-color:var(--orange)"></span><b style="color:var(--orange)">第一主成分 PC₁</b>（按 √λ₁ 缩放）</div>
+      <div><span class="ln" style="border-color:var(--cyan)"></span><b style="color:var(--cyan)">第二主成分 PC₂</b>（按 √λ₂ 缩放）</div>
+      <div><span class="ln" style="border-color:var(--red)"></span>投影到 PC₁ 的残差（降维丢失）</div>
+    </div>
+    <div class="hint"><b>动手（§8.5）：</b>拖「相关性 / 散布」滑杆<b>重新生成</b>点云，或在画布<b>左键点击</b>添加点、<b>拖动</b>移动、<b>右键</b>删除。两条主轴（椭圆即数据协方差的等值线）实时更新。勾「<b>投影到第一主成分</b>」看二维→一维降维：点落到 PC₁ 直线上，红线是被丢掉的方差。</div>
+  </div>
+  <div class="panel">
+    <h2>点云生成</h2>
+    <div class="card">
+      <div class="row"><label>相关性 ρ</label><input id="rho" type="range" min="-0.95" max="0.95" step="0.02" value="0.75"><div class="val" id="vrho">0.75</div></div>
+      <div class="row"><label>x 散布 σₓ</label><input id="sx" type="range" min="0.4" max="3.2" step="0.05" value="2.2"><div class="val" id="vsx">2.20</div></div>
+      <div class="row"><label>y 散布 σᵧ</label><input id="sy" type="range" min="0.4" max="3.2" step="0.05" value="1.1"><div class="val" id="vsy">1.10</div></div>
+      <div class="row"><label>点数 N</label><input id="np" type="range" min="10" max="400" step="5" value="160"><div class="val" id="vnp">160</div></div>
+      <div class="presets" style="margin-top:4px">
+        <button class="b" onclick="regen2()">重新生成</button>
+        <button class="b" onclick="seedShape('iso')">各向同性</button>
+        <button class="b" onclick="seedShape('line')">近共线</button>
+        <button class="b" onclick="clearPts()">清空</button>
+      </div>
+      <label class="chk"><input type="checkbox" id="showProj" onchange="reqd2()">投影到第一主成分（降维到 1D）</label>
+      <label class="chk"><input type="checkbox" id="showEll" checked onchange="reqd2()">显示协方差椭圆（1σ / 2σ）</label>
+    </div>
+
+    <h2>协方差 Σ 与 SVD</h2>
+    <div class="card">
+      <div class="mat">
+        <span class="lab">Σ</span><span class="brk">[</span>
+        <div class="col"><div class="cell" id="C00">–</div><div class="cell" id="C10">–</div></div>
+        <div class="col"><div class="cell" id="C01">–</div><div class="cell" id="C11">–</div></div>
+        <span class="brk">]</span>
+      </div>
+      <div class="stat"><span>样本相关系数 r</span><span id="rd_r">–</span></div>
+      <div class="stat"><span>均值 μ = (x̄, ȳ)</span><span id="rd_mu">–</span></div>
+    </div>
+
+    <h2>主成分（= 协方差特征 = 数据 SVD）</h2>
+    <div class="card">
+      <div class="stat"><span>λ₁ (PC₁ 方差) = σ₁²/(N−1)</span><span id="rd_l1">–</span></div>
+      <div class="stat"><span>λ₂ (PC₂ 方差) = σ₂²/(N−1)</span><span id="rd_l2">–</span></div>
+      <div class="stat"><span>PC₁ 方向角</span><span id="rd_pcang">–</span></div>
+      <div style="margin-top:8px;font-size:12px;color:var(--dim)">解释方差比例（PC₁ / PC₂）</div>
+      <div class="bar"><i id="bar1" style="width:50%;background:var(--orange)"></i></div>
+      <div class="bar"><i id="bar2" style="width:50%;background:var(--cyan)"></i></div>
+      <div class="stat" style="margin-top:6px"><span>PC₁ 解释方差比例</span><span id="rd_ev1">–</span></div>
+      <div class="stat"><span>PC₂ 解释方差比例</span><span id="rd_ev2">–</span></div>
+      <div class="stat"><span>累计（PC₁，= 降维保留方差）</span><span id="rd_cum">–</span></div>
+    </div>
+    <div class="card note">
+      <b>正文呼应（§8.5）：</b>对中心化数据 <span class="y">X̃</span> 做 SVD（X̃ = UΣ<sub>sv</sub>Vᵀ），<b>右奇异向量 vᵢ = 主成分方向 = 协方差 Σ=X̃ᵀX̃/(N−1) 的特征向量</b>，<b>解释方差 λᵢ = σᵢ²/(N−1)</b>——三位一体。主轴长按 <span class="o">√λ₁</span>、<span class="c">√λ₂</span> 缩放，正是协方差椭圆的半轴。降维到 PC₁ 就是把点正交投影到 <span class="o">v₁</span> 直线上：由 Eckart–Young（§8.3），这是<b>所有 1 维投影里保留方差最多、重构误差最小</b>的；红色残差的平方和 = 丢掉的方差 = λ₂·(N−1)。
+    </div>
+    <div class="card note">
+      <b>与折叠的连接：</b>把 MD 轨迹的 <b>T 帧 × 3M 坐标</b>摊平成长方矩阵，先用 <b>Kabsch</b>（SVD 求最优旋转去掉整体平转）对齐每帧，再做 PCA——前几个主成分就是 <b>essential dynamics</b>（主要集体构象运动），和本图「前几个主轴抓住绝大部分方差」是同一件事。
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   工具：2×2 线性代数（紧凑、稳健）
+   ============================================================ */
+// 2×2 对称矩阵 [[a,b],[b,c]] 的特征分解（解析公式，稳健处理退化）
+// 返回 {l1,l2,v1,v2}，l1>=l2，vi 为单位特征向量（列）
+function eigSym2(a,b,c){
+  const tr=a+c, det=a*c-b*b;
+  const disc=Math.sqrt(Math.max(0,(tr*tr)/4-det));
+  const l1=tr/2+disc, l2=tr/2-disc;
+  // 特征向量：对 l1 解 (A-l1 I)v=0
+  let v1;
+  if(Math.abs(b)>1e-12){
+    v1=[l1-c, b];
+  } else {
+    // 对角矩阵：按 a,c 决定主轴
+    v1 = (a>=c)?[1,0]:[0,1];
+  }
+  const n1=Math.hypot(v1[0],v1[1])||1; v1=[v1[0]/n1,v1[1]/n1];
+  const v2=[-v1[1],v1[0]]; // 正交补
+  return {l1,l2,v1,v2};
+}
+
+// 任意 2×2 矩阵 A=[[a,b],[c,d]] 的 SVD：A = U Σ Vᵀ
+// 思路：对 AᵀA（对称半正定）做特征分解得 V 与 σ²，再由 A vᵢ=σᵢ uᵢ 得 U。
+// 返回 {U,S,V}（U,V 为 2×2 数组按列存方向；S=[σ1,σ2]，σ1>=σ2>=0）
+function svd2(A){
+  const a=A[0][0], b=A[0][1], c=A[1][0], d=A[1][1];
+  // AᵀA = [[a²+c², ab+cd],[ab+cd, b²+d²]]
+  const m00=a*a+c*c, m01=a*b+c*d, m11=b*b+d*d;
+  const e=eigSym2(m00,m01,m11);
+  const s1=Math.sqrt(Math.max(0,e.l1)), s2=Math.sqrt(Math.max(0,e.l2));
+  const v1=e.v1.slice(), v2=e.v2.slice();
+  // U 列：uᵢ = A vᵢ / σᵢ（σ 太小则用 u1 的正交补补齐，保证 U 正交）
+  let u1, u2;
+  const Av1=[a*v1[0]+b*v1[1], c*v1[0]+d*v1[1]];
+  const Av2=[a*v2[0]+b*v2[1], c*v2[0]+d*v2[1]];
+  if(s1>1e-9){ u1=[Av1[0]/s1, Av1[1]/s1]; } else { u1=[1,0]; }
+  if(s2>1e-9){ u2=[Av2[0]/s2, Av2[1]/s2]; } else { u2=[-u1[1], u1[0]]; }
+  // 规范化（防数值漂移）
+  const nu1=Math.hypot(u1[0],u1[1])||1; u1=[u1[0]/nu1,u1[1]/nu1];
+  const nu2=Math.hypot(u2[0],u2[1])||1; u2=[u2[0]/nu2,u2[1]/nu2];
+  // V,U 以「列向量」语义：V=[v1 v2]，U=[u1 u2]
+  const V=[[v1[0],v2[0]],[v1[1],v2[1]]];
+  const U=[[u1[0],u2[0]],[u1[1],u2[1]]];
+  return {U:U, S:[s1,s2], V:V};
+}
+// 2×2 矩阵乘向量
+function mv(M,x){ return [M[0][0]*x[0]+M[0][1]*x[1], M[1][0]*x[0]+M[1][1]*x[1]]; }
+// 2×2 矩阵乘 2×2
+function mm(A,B){
+  return [[A[0][0]*B[0][0]+A[0][1]*B[1][0], A[0][0]*B[0][1]+A[0][1]*B[1][1]],
+          [A[1][0]*B[0][0]+A[1][1]*B[1][0], A[1][0]*B[0][1]+A[1][1]*B[1][1]]];
+}
+function transpose2(M){ return [[M[0][0],M[1][0]],[M[0][1],M[1][1]]]; }
+
+/* ============================================================
+   画布适配 devicePixelRatio
+   ============================================================ */
+function fit(cv){
+  const r=cv.getBoundingClientRect(), dpr=window.devicePixelRatio||1;
+  cv.width=Math.max(1,Math.round(r.width*dpr));
+  cv.height=Math.max(1,Math.round(r.height*dpr));
+  return {w:r.width,h:r.height,dpr};
+}
+function el(id){return document.getElementById(id);}
+// 标准正态随机（Box–Muller）
+function randn(){let u=0,v=0;while(u===0)u=Math.random();while(v===0)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+
+/* ============================================================
+   通用绘图小工具（带 ctx 参数，两视图共用）
+   ============================================================ */
+function arrow(ctx,x0,y0,x1p,y1p,col,lw){
+  ctx.strokeStyle=col; ctx.fillStyle=col; ctx.lineWidth=lw||2.4;
+  ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1p,y1p); ctx.stroke();
+  const ang=Math.atan2(y1p-y0,x1p-x0), hs=10;
+  ctx.beginPath(); ctx.moveTo(x1p,y1p);
+  ctx.lineTo(x1p-hs*Math.cos(ang-0.4), y1p-hs*Math.sin(ang-0.4));
+  ctx.lineTo(x1p-hs*Math.cos(ang+0.4), y1p-hs*Math.sin(ang+0.4));
+  ctx.closePath(); ctx.fill();
+}
+function dot(ctx,sx,sy,r){ ctx.beginPath(); ctx.arc(sx,sy,r,0,7); ctx.fill(); }
+function labelAt(ctx,sx,sy,txt,col){
+  ctx.fillStyle=col; ctx.font='bold 13px system-ui'; ctx.textAlign='left';
+  ctx.fillText(txt, sx+7, sy-6);
+}
+
+/* ============================================================
+   VIEW 1 —— SVD 几何：圆变椭圆
+   世界坐标：画布中心为原点，y 向上为正
+   ============================================================ */
+const cv1=document.getElementById('cv1'), x1=cv1.getContext('2d');
+const slA={a11:el('a11'),a12:el('a12'),a21:el('a21'),a22:el('a22')};
+let step1=0;            // 0=合成A, 1=Vᵀ, 2=Σ, 3=U
+let animating=false, animT=0; // 动画：0..3 连续推进
+
+function presetA(k){
+  const set=(p,q,r,s)=>{slA.a11.value=p;slA.a12.value=q;slA.a21.value=r;slA.a22.value=s;};
+  if(k==='reset')   set(1.6,0.9,0.2,1.2);
+  if(k==='rot'){const t=0.6;set(Math.cos(t).toFixed(2),(-Math.sin(t)).toFixed(2),Math.sin(t).toFixed(2),Math.cos(t).toFixed(2));}
+  if(k==='scale')   set(2.2,0,0,0.8);
+  if(k==='shear')   set(1,1.2,0,1);
+  if(k==='singular')set(1.5,0.75,1.0,0.5); // det≈0 -> σ2≈0
+  step1=0; setStepUI(); draw1();
+}
+function setStep(s){ animating=false; el('animBtn').textContent='▶ 分步动画 Vᵀ→Σ→U'; step1=s; setStepUI(); draw1(); }
+function setStepUI(){ for(let i=0;i<4;i++) el('st'+i).classList.toggle('on', i===step1); }
+function toggleAnim(){
+  animating=!animating;
+  el('animBtn').textContent = animating ? '⏸ 暂停动画' : '▶ 分步动画 Vᵀ→Σ→U';
+  if(animating){ animT=0; }
+}
+
+// 线性插值两个 2×2 矩阵
+function lerpM(A,B,t){
+  return [[A[0][0]+(B[0][0]-A[0][0])*t, A[0][1]+(B[0][1]-A[0][1])*t],
+          [A[1][0]+(B[1][0]-A[1][0])*t, A[1][1]+(B[1][1]-A[1][1])*t]];
+}
+
+function draw1(){
+  const A=[[+slA.a11.value,+slA.a12.value],[+slA.a21.value,+slA.a22.value]];
+  el('va11').textContent=A[0][0].toFixed(2); el('va12').textContent=A[0][1].toFixed(2);
+  el('va21').textContent=A[1][0].toFixed(2); el('va22').textContent=A[1][1].toFixed(2);
+
+  const {w,h,dpr}=fit(cv1); x1.setTransform(dpr,0,0,dpr,0,0); x1.clearRect(0,0,w,h);
+  const cx=w/2, cy=h/2, sc=Math.min(w,h)/9; // 世界单位 -> 像素
+  const SX=(p)=>cx+p[0]*sc, SY=(p)=>cy-p[1]*sc;
+
+  // 网格 + 轴
+  x1.strokeStyle='#1b1f2b'; x1.lineWidth=1;
+  for(let g=-5;g<=5;g++){
+    x1.beginPath();x1.moveTo(SX([g,-5]),SY([g,-5]));x1.lineTo(SX([g,5]),SY([g,5]));x1.stroke();
+    x1.beginPath();x1.moveTo(SX([-5,g]),SY([-5,g]));x1.lineTo(SX([5,g]),SY([5,g]));x1.stroke();
+  }
+  x1.strokeStyle='#33394a'; x1.lineWidth=1.4;
+  x1.beginPath();x1.moveTo(0,cy);x1.lineTo(w,cy);x1.moveTo(cx,0);x1.lineTo(cx,h);x1.stroke();
+
+  // SVD 分解
+  const sv=svd2(A);
+  const U=sv.U, S=sv.S, V=sv.V;
+  const VT=transpose2(V);
+  const Sm=[[S[0],0],[0,S[1]]];
+
+  // 当前要画的「变换矩阵」M：取决于 step 或动画进度
+  // 累积步骤：起点=单位圆(I) → Vᵀ → ΣVᵀ → UΣVᵀ(=A)
+  const M_I=[[1,0],[0,1]];
+  const M_VT=VT;
+  const M_SVT=mm(Sm,VT);
+  const M_A=mm(U,M_SVT);
+  let M, stepName;
+  if(animating){
+    const seg=Math.floor(animT), tt=animT-seg;
+    const ease=tt*tt*(3-2*tt); // smoothstep
+    if(seg<=0){ M=lerpM(M_I,M_VT,ease); stepName='① Vᵀ 旋转（圆仍是圆）'; }
+    else if(seg===1){ M=lerpM(M_VT,M_SVT,ease); stepName='② Σ 沿坐标轴拉伸（圆→正椭圆）'; }
+    else { M=lerpM(M_SVT,M_A,ease); stepName='③ U 旋转（正椭圆→最终朝向）'; }
+  } else {
+    if(step1===0){ M=M_A; stepName='合成 A = UΣVᵀ'; }
+    else if(step1===1){ M=M_VT; stepName='① Vᵀ 旋转后（圆仍是圆）'; }
+    else if(step1===2){ M=M_SVT; stepName='② Σ 拉伸后（正椭圆，半轴=σᵢ）'; }
+    else { M=M_A; stepName='③ U 旋转后 = A（最终椭圆）'; }
+  }
+
+  // ---- 输入单位圆（淡色虚线参考）----
+  x1.strokeStyle='#5b6276'; x1.lineWidth=1.6; x1.setLineDash([5,5]);
+  x1.beginPath();
+  for(let i=0;i<=72;i++){const t=i/72*2*Math.PI; const p=[Math.cos(t),Math.sin(t)];
+    const s=[SX(p),SY(p)]; if(i===0)x1.moveTo(s[0],s[1]); else x1.lineTo(s[0],s[1]);}
+  x1.stroke(); x1.setLineDash([]);
+  // 输入标准基（淡）
+  arrow(x1,SX([0,0]),SY([0,0]),SX([1,0]),SY([1,0]),'#444b5e',1.4);
+  arrow(x1,SX([0,0]),SY([0,0]),SX([0,1]),SY([0,1]),'#444b5e',1.4);
+
+  // ---- 像（椭圆 = M 作用单位圆）----
+  x1.strokeStyle='#f5a623'; x1.lineWidth=2.6;
+  x1.beginPath();
+  for(let i=0;i<=120;i++){const t=i/120*2*Math.PI; const p=mv(M,[Math.cos(t),Math.sin(t)]);
+    const s=[SX(p),SY(p)]; if(i===0)x1.moveTo(s[0],s[1]); else x1.lineTo(s[0],s[1]);}
+  x1.closePath(); x1.fillStyle='rgba(245,166,35,.07)'; x1.fill(); x1.stroke();
+
+  // ---- 右奇异向量 v1,v2（输入端，黄；画在单位圆上）----
+  arrow(x1,SX([0,0]),SY([0,0]),SX([V[0][0],V[1][0]]),SY([V[0][0],V[1][0]]),'#ffd166',2.2);
+  arrow(x1,SX([0,0]),SY([0,0]),SX([V[0][1],V[1][1]]),SY([V[0][1],V[1][1]]),'#ffd166',2.0);
+  labelAt(x1,SX([V[0][0],V[1][0]]),SY([V[0][0],V[1][0]]),'v₁','#ffd166');
+  labelAt(x1,SX([V[0][1],V[1][1]]),SY([V[0][1],V[1][1]]),'v₂','#ffd166');
+
+  // ---- 椭圆半轴（左奇异向量按当前拉伸画）----
+  let axis1, axis2;
+  if(!animating && step1===2){
+    axis1=[S[0],0]; axis2=[0,S[1]];          // Σ 拉伸后：半轴沿坐标轴
+  } else if(!animating && step1===1){
+    axis1=mv(M,[1,0]); axis2=mv(M,[0,1]);    // Vᵀ 后：仍是单位圆，画转过的基
+  } else {
+    axis1=[S[0]*U[0][0], S[0]*U[1][0]];       // 合成/U旋后：半轴 = σᵢ uᵢ
+    axis2=[S[1]*U[0][1], S[1]*U[1][1]];
+  }
+  arrow(x1,SX([0,0]),SY([0,0]),SX(axis1),SY(axis1),'#22c7d6',2.6);
+  arrow(x1,SX([0,0]),SY([0,0]),SX(axis2),SY(axis2),'#22c7d6',2.2);
+  labelAt(x1,SX(axis1),SY(axis1),'σ₁u₁','#22c7d6');
+  labelAt(x1,SX(axis2),SY(axis2),'σ₂u₂','#22c7d6');
+  // 半轴端点小圈（标 σ = 半轴长）
+  x1.fillStyle='#ef6b73';
+  dot(x1,SX(axis1),SY(axis1),4); dot(x1,SX(axis2),SY(axis2),4);
+
+  // 当前步骤大字 + σ 读数
+  x1.fillStyle='#e7e9f0'; x1.font='bold 15px system-ui'; x1.textAlign='left';
+  x1.fillText(stepName, 16, h-44);
+  x1.fillStyle='#9aa0b4'; x1.font='12px system-ui';
+  x1.fillText('σ₁='+S[0].toFixed(3)+'   σ₂='+S[1].toFixed(3), 16, h-26);
+
+  // ---- 面板数值 ----
+  el('U00').textContent=U[0][0].toFixed(3); el('U01').textContent=U[0][1].toFixed(3);
+  el('U10').textContent=U[1][0].toFixed(3); el('U11').textContent=U[1][1].toFixed(3);
+  el('VT00').textContent=VT[0][0].toFixed(3); el('VT01').textContent=VT[0][1].toFixed(3);
+  el('VT10').textContent=VT[1][0].toFixed(3); el('VT11').textContent=VT[1][1].toFixed(3);
+  el('S00').textContent=S[0].toFixed(3); el('S11').textContent=S[1].toFixed(3);
+  el('rd_s1').textContent=S[0].toFixed(4); el('rd_s2').textContent=S[1].toFixed(4);
+  el('rd_kappa').textContent = S[1]>1e-9 ? (S[0]/S[1]).toFixed(3) : '∞ (奇异)';
+  el('rd_va').textContent=(Math.atan2(V[1][0],V[0][0])*180/Math.PI).toFixed(1)+'°';
+  el('rd_ua').textContent=(Math.atan2(U[1][0],U[0][0])*180/Math.PI).toFixed(1)+'°';
+  const det=A[0][0]*A[1][1]-A[0][1]*A[1][0];
+  el('rd_det').textContent=Math.abs(det).toFixed(4)+'  (σ₁σ₂='+(S[0]*S[1]).toFixed(4)+')';
+  // 正交校验 ‖UᵀU−I‖ + ‖VᵀV−I‖（绝对值和）
+  const UtU=mm(transpose2(U),U), VtV=mm(transpose2(V),V);
+  const orth=Math.abs(UtU[0][0]-1)+Math.abs(UtU[0][1])+Math.abs(UtU[1][0])+Math.abs(UtU[1][1]-1)
+            +Math.abs(VtV[0][0]-1)+Math.abs(VtV[0][1])+Math.abs(VtV[1][0])+Math.abs(VtV[1][1]-1);
+  el('rd_orth').textContent=orth.toExponential(2);
+  // 重构校验 ‖UΣVᵀ−A‖
+  const R=mm(U,mm(Sm,VT));
+  let rec=0; for(let i=0;i<2;i++)for(let j=0;j<2;j++)rec+=Math.abs(R[i][j]-A[i][j]);
+  el('rd_recon').textContent=rec.toExponential(2);
+}
+
+// 滑杆事件：拖动实时重绘（动画进行时也跟随更新 SVD）
+Object.values(slA).forEach(s=>s.addEventListener('input', draw1));
+
+/* ============================================================
+   VIEW 2 —— PCA 点云
+   数据存世界坐标 (x,y)，世界范围约 [-8,8]×[-6,6]
+   ============================================================ */
+const cv2=document.getElementById('cv2'), x2=cv2.getContext('2d');
+let pts=[];                 // 数据点 [x,y]
+let view2={cx:0,cy:0,sc:40};
+let needDraw2=true, drag2=-1;
+const slP={rho:el('rho'),sx:el('sx'),sy:el('sy'),np:el('np')};
+
+function reqd2(){ needDraw2=true; }
+function clearPts(){ pts=[]; reqd2(); }
+function seedShape(k){
+  if(k==='iso'){ slP.rho.value=0; slP.sx.value=1.6; slP.sy.value=1.6; }
+  if(k==='line'){ slP.rho.value=0.93; slP.sx.value=2.6; slP.sy.value=2.4; }
+  syncSliderVals(); regen2();
+}
+function syncSliderVals(){
+  el('vrho').textContent=(+slP.rho.value).toFixed(2);
+  el('vsx').textContent=(+slP.sx.value).toFixed(2);
+  el('vsy').textContent=(+slP.sy.value).toFixed(2);
+  el('vnp').textContent=(+slP.np.value);
+}
+// 按相关性 ρ 与边际散布 σx,σy 生成相关高斯点云（Cholesky 思路）
+function regen2(){
+  const rho=+slP.rho.value, sx=+slP.sx.value, sy=+slP.sy.value, N=+slP.np.value;
+  pts=[];
+  // 相关二元高斯：x = σx·z1 ; y = σy·(ρ z1 + √(1−ρ²) z2)
+  const k=Math.sqrt(Math.max(0,1-rho*rho));
+  for(let i=0;i<N;i++){
+    const z1=randn(), z2=randn();
+    pts.push([ sx*z1, sy*(rho*z1 + k*z2) ]);
+  }
+  reqd2();
+}
+
+// 计算均值与 2×2 样本协方差 + 特征分解（= PCA）
+function pcaStats(){
+  const N=pts.length;
+  if(N<2) return null;
+  let mx=0,my=0; pts.forEach(p=>{mx+=p[0];my+=p[1];}); mx/=N; my/=N;
+  let cxx=0,cxy=0,cyy=0;
+  pts.forEach(p=>{const dx=p[0]-mx, dy=p[1]-my; cxx+=dx*dx; cxy+=dx*dy; cyy+=dy*dy;});
+  const den=N-1;
+  cxx/=den; cxy/=den; cyy/=den;
+  const e=eigSym2(cxx,cxy,cyy); // l1>=l2，v1=主方向
+  return {N,mx,my,cxx,cxy,cyy,l1:Math.max(0,e.l1),l2:Math.max(0,e.l2),v1:e.v1,v2:e.v2};
+}
+
+function draw2(){
+  const {w,h,dpr}=fit(cv2); x2.setTransform(dpr,0,0,dpr,0,0); x2.clearRect(0,0,w,h);
+  const cx=w/2, cy=h/2, sc=Math.min(w,h)/14;
+  view2={cx,cy,sc};
+  const SX=(p)=>cx+p[0]*sc, SY=(p)=>cy-p[1]*sc;
+
+  // 网格 + 轴
+  x2.strokeStyle='#1b1f2b'; x2.lineWidth=1;
+  for(let g=-8;g<=8;g++){
+    x2.beginPath();x2.moveTo(SX([g,-8]),SY([g,-8]));x2.lineTo(SX([g,8]),SY([g,8]));x2.stroke();
+    x2.beginPath();x2.moveTo(SX([-8,g]),SY([-8,g]));x2.lineTo(SX([8,g]),SY([8,g]));x2.stroke();
+  }
+  x2.strokeStyle='#33394a'; x2.lineWidth=1.4;
+  x2.beginPath();x2.moveTo(0,cy);x2.lineTo(w,cy);x2.moveTo(cx,0);x2.lineTo(cx,h);x2.stroke();
+
+  const st=pcaStats();
+  const showProj=el('showProj').checked, showEll=el('showEll').checked;
+
+  if(!st){
+    x2.fillStyle='#9aa0b4'; x2.font='14px system-ui'; x2.textAlign='left';
+    x2.fillText('至少需要 2 个点（点击画布添加，或拖滑杆生成点云）', 20, 30);
+    ['C00','C01','C10','C11','rd_r','rd_mu','rd_l1','rd_l2','rd_pcang','rd_ev1','rd_ev2','rd_cum'].forEach(id=>el(id).textContent='–');
+    el('bar1').style.width='0%'; el('bar2').style.width='0%';
+    return;
+  }
+  const mu=[st.mx,st.my];
+  const s1=Math.sqrt(st.l1), s2=Math.sqrt(st.l2); // 标准差（半轴比例）
+
+  // ---- 协方差椭圆（1σ / 2σ）----
+  if(showEll){
+    for(const kσ of [1,2]){
+      x2.strokeStyle = kσ===1 ? 'rgba(179,136,255,.55)' : 'rgba(179,136,255,.28)';
+      x2.lineWidth = kσ===1?2:1.4; x2.setLineDash(kσ===1?[]:[6,5]);
+      x2.beginPath();
+      for(let i=0;i<=96;i++){
+        const t=i/96*2*Math.PI;
+        // 椭圆点 = μ + kσ·( s1 cos t · v1 + s2 sin t · v2 )
+        const px=mu[0] + kσ*(s1*Math.cos(t)*st.v1[0] + s2*Math.sin(t)*st.v2[0]);
+        const py=mu[1] + kσ*(s1*Math.cos(t)*st.v1[1] + s2*Math.sin(t)*st.v2[1]);
+        if(i===0)x2.moveTo(SX([px,py]),SY([px,py])); else x2.lineTo(SX([px,py]),SY([px,py]));
+      }
+      x2.stroke();
+    }
+    x2.setLineDash([]);
+  }
+
+  // ---- 投影到 PC1：PC1 直线 + 残差 + 投影点 ----
+  if(showProj){
+    const big=20;
+    const e1=[mu[0]-st.v1[0]*big, mu[1]-st.v1[1]*big];
+    const e2=[mu[0]+st.v1[0]*big, mu[1]+st.v1[1]*big];
+    x2.strokeStyle='rgba(245,166,35,.5)'; x2.lineWidth=2; x2.setLineDash([8,6]);
+    x2.beginPath(); x2.moveTo(SX(e1),SY(e1)); x2.lineTo(SX(e2),SY(e2)); x2.stroke(); x2.setLineDash([]);
+    pts.forEach(p=>{
+      const dx=p[0]-mu[0], dy=p[1]-mu[1];
+      const t=dx*st.v1[0]+dy*st.v1[1]; // 沿 v1 的坐标
+      const proj=[mu[0]+t*st.v1[0], mu[1]+t*st.v1[1]];
+      x2.strokeStyle='rgba(239,107,115,.55)'; x2.lineWidth=1.2;
+      x2.beginPath(); x2.moveTo(SX(p),SY(p)); x2.lineTo(SX(proj),SY(proj)); x2.stroke();
+      x2.fillStyle='#7bd88f'; dot(x2,SX(proj),SY(proj),3.2);
+    });
+  }
+
+  // ---- 数据点 ----
+  pts.forEach(p=>{
+    x2.fillStyle = showProj ? 'rgba(255,209,102,.45)' : '#ffd166';
+    x2.beginPath(); x2.arc(SX(p),SY(p),3.6,0,7); x2.fill();
+  });
+
+  // ---- 主成分箭头（从 μ 出发，按 √λ 缩放，可见性系数 1.6）----
+  const K=1.6;
+  const pc1=[mu[0]+st.v1[0]*s1*K, mu[1]+st.v1[1]*s1*K];
+  const pc2=[mu[0]+st.v2[0]*s2*K, mu[1]+st.v2[1]*s2*K];
+  arrow(x2,SX(mu),SY(mu),SX(pc1),SY(pc1),'#f5a623',3);
+  arrow(x2,SX(mu),SY(mu),SX(pc2),SY(pc2),'#22c7d6',2.6);
+  labelAt(x2,SX(pc1),SY(pc1),'PC₁ (√λ₁)','#f5a623');
+  labelAt(x2,SX(pc2),SY(pc2),'PC₂ (√λ₂)','#22c7d6');
+  // 均值点
+  x2.fillStyle='#7bd88f'; x2.strokeStyle='#0f1117'; x2.lineWidth=2;
+  x2.beginPath(); x2.arc(SX(mu),SY(mu),6,0,7); x2.fill(); x2.stroke();
+  labelAt(x2,SX(mu),SY(mu),'μ','#7bd88f');
+
+  // 降维提示
+  if(showProj){
+    const lost=st.l2*(st.N-1);
+    x2.fillStyle='#ef6b73'; x2.font='12px system-ui'; x2.textAlign='left';
+    x2.fillText('降维到 PC₁：红线 = 被丢弃方差（Σ残差² = λ₂·(N−1) = '+lost.toFixed(2)+'）', 16, h-18);
+  }
+
+  // ---- 面板读数 ----
+  el('C00').textContent=st.cxx.toFixed(3); el('C01').textContent=st.cxy.toFixed(3);
+  el('C10').textContent=st.cxy.toFixed(3); el('C11').textContent=st.cyy.toFixed(3);
+  const r = (st.cxx>1e-9&&st.cyy>1e-9) ? st.cxy/Math.sqrt(st.cxx*st.cyy) : 0;
+  el('rd_r').textContent=r.toFixed(4);
+  el('rd_mu').textContent='('+st.mx.toFixed(2)+', '+st.my.toFixed(2)+')';
+  el('rd_l1').textContent=st.l1.toFixed(4);
+  el('rd_l2').textContent=st.l2.toFixed(4);
+  el('rd_pcang').textContent=(Math.atan2(st.v1[1],st.v1[0])*180/Math.PI).toFixed(1)+'°';
+  const tot=st.l1+st.l2;
+  const ev1= tot>1e-12 ? st.l1/tot : 1, ev2= tot>1e-12 ? st.l2/tot : 0;
+  el('rd_ev1').textContent=(ev1*100).toFixed(1)+'%';
+  el('rd_ev2').textContent=(ev2*100).toFixed(1)+'%';
+  el('rd_cum').textContent=(ev1*100).toFixed(1)+'%';
+  el('bar1').style.width=(ev1*100).toFixed(1)+'%';
+  el('bar2').style.width=(ev2*100).toFixed(1)+'%';
+}
+
+/* ---- VIEW2 鼠标交互 ---- */
+function toWorld2(e){
+  const r=cv2.getBoundingClientRect();
+  return [ (e.clientX-r.left-view2.cx)/view2.sc, -(e.clientY-r.top-view2.cy)/view2.sc ];
+}
+function nearestPt(wx,wy){
+  let best=-1, bd=0.45; // 抓取半径（世界单位）
+  pts.forEach((p,i)=>{const d=Math.hypot(p[0]-wx,p[1]-wy); if(d<bd){bd=d;best=i;}});
+  return best;
+}
+cv2.addEventListener('contextmenu', e=>{
+  e.preventDefault();
+  const wp=toWorld2(e); const idx=nearestPt(wp[0],wp[1]);
+  if(idx>=0){ pts.splice(idx,1); reqd2(); }
+});
+cv2.addEventListener('mousedown', e=>{
+  if(e.button!==0) return;
+  const wp=toWorld2(e); const idx=nearestPt(wp[0],wp[1]);
+  if(idx>=0){ drag2=idx; cv2.style.cursor='grabbing'; }
+  else { pts.push([wp[0],wp[1]]); reqd2(); } // 空白处点击 = 添加点
+});
+window.addEventListener('mousemove', e=>{
+  if(drag2<0) return;
+  const wp=toWorld2(e);
+  pts[drag2]=[Math.max(-8,Math.min(8,wp[0])), Math.max(-6,Math.min(6,wp[1]))];
+  reqd2();
+});
+window.addEventListener('mouseup', ()=>{ if(drag2>=0){drag2=-1; cv2.style.cursor='crosshair';} });
+// 生成滑杆：拖动即重新生成点云
+Object.values(slP).forEach(s=>s.addEventListener('input', ()=>{ syncSliderVals(); regen2(); }));
+
+/* ============================================================
+   标签切换 + 主循环
+   ============================================================ */
+let curTab=1;
+function showTab(n){
+  curTab=n;
+  el('view1').classList.toggle('active', n===1);
+  el('view2').classList.toggle('active', n===2);
+  el('tab1').classList.toggle('active', n===1);
+  el('tab2').classList.toggle('active', n===2);
+  if(n===1) draw1(); else needDraw2=true;
+}
+window.addEventListener('resize', ()=>{ if(curTab===1) draw1(); else needDraw2=true; });
+
+// VIEW1 动画用 rAF 推进；VIEW2 用 needDraw2 节流重绘
+let last=performance.now();
+function loop(now){
+  const dt=Math.min(0.05,(now-last)/1000); last=now;
+  if(curTab===1){
+    if(animating){
+      animT += dt*0.7; // 每段约 1.4s
+      if(animT>=3){
+        animT=3; draw1();
+        animating=false; el('animBtn').textContent='▶ 分步动画 Vᵀ→Σ→U';
+        step1=0; setStepUI(); draw1(); // 停在合成态
+      } else {
+        draw1();
+      }
+    }
+  } else {
+    if(needDraw2){ needDraw2=false; draw2(); }
+  }
+  requestAnimationFrame(loop);
+}
+
+/* 初始化 */
+setStepUI();
+draw1();
+syncSliderVals();
+regen2();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

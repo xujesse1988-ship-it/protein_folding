@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>正交投影与最小二乘 · 投影到直线 · 散点最小二乘拟合 —— 配套第 4 章</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a24; --panel2:#1f2330; --line:#2b3040;
+    --text:#e7e9f0; --dim:#9aa0b4;
+    --orange:#f5a623;  /* 方向向量 a / 拟合线 */
+    --cyan:#22c7d6;    /* 投影 p / 列空间 */
+    --yellow:#ffd166;  /* 向量 b / 数据 */
+    --red:#ef6b73;     /* 残差 */
+    --green:#7bd88f;   /* 命中 / 正交标记 */
+    --violet:#b388ff;  /* 辅助 */
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;}
+  header{padding:13px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{margin:0;font-size:18px;letter-spacing:.3px}
+  header h1 .c{color:var(--cyan)} header h1 .o{color:var(--orange)} header h1 .r{color:var(--red)}
+  header p{margin:5px 0 0;color:var(--dim);font-size:13px;line-height:1.65}
+  header p b{color:#fff} header p code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#cdd6f4}
+  .tabs{display:flex;gap:8px;padding:10px 20px 0;background:var(--panel);border-bottom:1px solid var(--line)}
+  .tabs button{background:#20242f;color:var(--dim);border:1px solid var(--line);border-bottom:none;
+    border-radius:9px 9px 0 0;padding:9px 15px;font-size:13.5px;cursor:pointer;font-weight:600}
+  .tabs button.active{background:var(--bg);color:#fff;border-color:var(--line)}
+  .tabs button:hover{filter:brightness(1.15)}
+  .wrap{display:flex;height:calc(100% - 84px - 46px);min-height:0}
+  .stage{position:relative;flex:1 1 auto;min-width:0;overflow:hidden;
+    background:radial-gradient(circle at 48% 46%,#161a26 0%,#0d0f15 84%)}
+  canvas{display:block;width:100%;height:100%}
+  #cv1{cursor:grab} #cv2{cursor:crosshair}
+  .legend{position:absolute;left:14px;top:12px;font-size:12.5px;pointer-events:none;
+    background:rgba(15,17,23,.62);padding:8px 11px;border-radius:8px;border:1px solid var(--line);line-height:1.95}
+  .legend .ln{display:inline-block;width:18px;height:0;border-top:3px solid;margin-right:6px;vertical-align:middle}
+  .legend .dt{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .hint{position:absolute;left:14px;bottom:12px;color:var(--dim);font-size:12px;pointer-events:none;
+    background:rgba(15,17,23,.55);padding:6px 10px;border-radius:8px;border:1px solid var(--line);max-width:640px;line-height:1.6}
+  .hint b{color:#e7e9f0}
+  .panel{flex:0 0 430px;max-width:55%;overflow-y:auto;border-left:1px solid var(--line);background:var(--panel);padding:16px}
+  .panel h2{font-size:14px;margin:18px 0 8px;color:#fff}
+  .panel h2:first-child{margin-top:0}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+  button.b{background:#262b3a;color:var(--text);border:1px solid var(--line);border-radius:8px;
+    padding:7px 11px;font-size:13px;cursor:pointer}
+  button.b:hover{filter:brightness(1.13)}
+  .row{display:flex;align-items:center;gap:10px;margin:9px 0}
+  .row label{flex:0 0 78px;font-weight:600;font-size:13px}
+  input[type=range]{flex:1 1 auto;accent-color:var(--cyan)}
+  .val{flex:0 0 58px;text-align:right;font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px}
+  .stat{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px dashed #2b3040;gap:8px}
+  .stat:last-child{border-bottom:none}
+  .stat span:last-child{color:#fff;font-variant-numeric:tabular-nums;text-align:right}
+  .note{font-size:12.5px;color:var(--dim);line-height:1.85}
+  .note b{color:#e7e9f0}
+  .note .o{color:var(--orange)} .note .c{color:var(--cyan)} .note .y{color:var(--yellow)}
+  .note .v{color:var(--violet)} .note .r{color:var(--red)} .note .g{color:var(--green)}
+  code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#cdd6f4}
+  .presets{display:flex;flex-wrap:wrap;gap:6px}
+  .presets button{flex:1 1 30%;font-size:12px;padding:6px 4px}
+  .mat{display:flex;align-items:center;gap:6px;justify-content:center;margin:8px 0 4px;font-variant-numeric:tabular-nums}
+  .mat .brk{font-size:48px;color:var(--dim);font-weight:200;line-height:.8}
+  .mat .col{display:flex;flex-direction:column;gap:6px}
+  .mat .cell{width:56px;text-align:center;font-size:13.5px}
+  .view{display:none;height:100%}
+  .view.active{display:flex}
+  .seg{display:flex;gap:0;margin:4px 0 0}
+  .seg button{flex:1 1 50%;background:#20242f;color:var(--dim);border:1px solid var(--line);
+    padding:7px 4px;font-size:12.5px;cursor:pointer;font-weight:600}
+  .seg button:first-child{border-radius:8px 0 0 8px}
+  .seg button:last-child{border-radius:0 8px 8px 0;border-left:none}
+  .seg button.on{background:#2d3650;color:#fff;border-color:#3a4564}
+  .chk{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;margin:9px 0}
+  .chk input{transform:scale(1.25)}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="o">正交投影</span>与<span class="c">最小二乘</span> · 投影到直线 · 散点拟合 · <span class="r">残差 ⊥ 拟合空间</span></h1>
+  <p>配套《线性代数深度入门》<b>第 4 章「内积、正交性与最小二乘」</b>。核心直觉一句话：<b>把向量 b「笔直拍」到一个子空间上得到影子 p，残差 b−p 必与该子空间垂直</b>——这条「垂直」就是<b>正规方程 AᵀA x̂=Aᵀb</b> 的全部来源，也是「投影点 = 最近点」（勾股定理）的证明。左标签对应 <code>§4.4 正交投影</code>，右标签对应 <code>§4.7 最小二乘 = 把 y 投影到列空间</code>。折叠连接：拟合实验曲线、回归力场参数、距离反推坐标、以及 Kabsch 结构叠合（带正交约束的最小二乘），骨架全是这张图。</p>
+</header>
+<div class="tabs">
+  <button id="tab1" class="active" onclick="showTab(1)">① 投影到一条直线（§4.4.1）</button>
+  <button id="tab2" onclick="showTab(2)">② 散点最小二乘拟合（§4.7）</button>
+</div>
+
+<!-- ============ VIEW 1: projection onto a line ============ -->
+<div id="view1" class="view active wrap">
+  <div class="stage">
+    <canvas id="cv1"></canvas>
+    <div class="legend">
+      <div><span class="dt" style="background:var(--yellow)"></span><b style="color:var(--yellow)">b</b> 待投影的点 / 向量（可拖）</div>
+      <div><span class="ln" style="border-color:var(--orange)"></span><b style="color:var(--orange)">a</b> 方向向量（可拖，定直线 W）</div>
+      <div><span class="dt" style="background:var(--cyan)"></span><b style="color:var(--cyan)">p = proj_a(b)</b> 正交投影（影子）</div>
+      <div><span class="ln" style="border-color:var(--red)"></span><b style="color:var(--red)">r = b − p</b> 残差（⊥ 直线，直角标记）</div>
+    </div>
+    <div class="hint"><b>动手（§4.4.1）：</b>拖动黄点 <b>b</b> 或橙色箭头端点 <b>a</b>。注意无论怎么拖，<b style="color:var(--red)">红色残差永远与橙线垂直（直角小方块）</b>——这就是「最近」的几何条件。蓝点 p 始终是橙线上离 b 最近的点。</div>
+  </div>
+  <div class="panel">
+    <h2>向量坐标（也可拖画布）</h2>
+    <div class="card">
+      <div class="row"><label>a.x</label><input id="ax" type="range" min="-6" max="6" step="0.05" value="3.0"><div class="val" id="vax">3.00</div></div>
+      <div class="row"><label>a.y</label><input id="ay" type="range" min="-6" max="6" step="0.05" value="1.2"><div class="val" id="vay">1.20</div></div>
+      <div class="row"><label>b.x</label><input id="bx" type="range" min="-6" max="6" step="0.05" value="1.5"><div class="val" id="vbx">1.50</div></div>
+      <div class="row"><label>b.y</label><input id="by" type="range" min="-6" max="6" step="0.05" value="3.4"><div class="val" id="vby">3.40</div></div>
+      <div class="presets" style="margin-top:4px">
+        <button class="b" onclick="preset1('perp')">b ⊥ a（投影=0）</button>
+        <button class="b" onclick="preset1('para')">b ∥ a（残差=0）</button>
+        <button class="b" onclick="preset1('reset')">复位</button>
+      </div>
+    </div>
+    <h2>投影公式（标量倍 c·a）</h2>
+    <div class="card note" style="text-align:center;font-size:14px;color:var(--text);line-height:2.2">
+      c = <span class="c">(aᵀb)</span> / <span class="o">(aᵀa)</span> = <b id="cval" class="g">0.00</b><br>
+      p = c·a ，  ‖p‖ = <b id="plen" class="c">0.00</b><br>
+      r = b − p ，  r ⊥ a ⟹ <span class="r">aᵀr</span> = <b id="atr" class="r">0.00</b>
+    </div>
+    <h2>投影矩阵 P = a aᵀ / (aᵀa)</h2>
+    <div class="card">
+      <div class="mat">
+        <span class="brk">[</span>
+        <div class="col">
+          <div class="cell" id="P00">–</div>
+          <div class="cell" id="P10">–</div>
+        </div>
+        <div class="col">
+          <div class="cell" id="P01">–</div>
+          <div class="cell" id="P11">–</div>
+        </div>
+        <span class="brk">]</span>
+      </div>
+      <div class="stat"><span>幂等性 ‖P²−P‖ （应≈0）</span><span id="idem">–</span></div>
+      <div class="stat"><span>对称性 ‖Pᵀ−P‖ （应≈0）</span><span id="symm">–</span></div>
+      <div class="stat"><span>迹 tr(P) = 秩（投影到 1 维线）</span><span id="trP">–</span></div>
+    </div>
+    <h2>读数</h2>
+    <div class="card">
+      <div class="stat"><span>‖b‖（原向量长度）</span><span id="blen">–</span></div>
+      <div class="stat"><span>‖p‖²+‖r‖²（勾股，应=‖b‖²）</span><span id="pyth">–</span></div>
+      <div class="stat"><span>‖r‖（残差范数 = b 到线的距离）</span><span id="rlen">–</span></div>
+      <div class="stat"><span>夹角 ∠(a,b)</span><span id="ang1">–</span></div>
+    </div>
+    <div class="card note">
+      <b>正文呼应（§4.4.1 / §4.4.3）：</b>投影 <span class="c">p = (aᵀb/aᵀa)·a</span> 是直线 W=span{a} 上离 b 最近的点。投影矩阵 <span class="c">P = a aᵀ/(aᵀa)</span> 是<b>秩 1 外积</b>，满足 <b>P²=P（幂等）</b>与 <b>Pᵀ=P（对称）</b>——这两条<b>就是</b>正交投影矩阵的代数刻画。残差 r=b−p 落在 a 的正交补里，<span class="r">aᵀr=0</span> 正是「残差 ⊥ 列空间」=正规方程的一维版。勾股 ‖b‖²=‖p‖²+‖r‖² 解释了为什么投影点最近（任何别的点都让斜边变长）。
+    </div>
+  </div>
+</div>
+
+<!-- ============ VIEW 2: scatter least squares ============ -->
+<div id="view2" class="view wrap">
+  <div class="stage">
+    <canvas id="cv2"></canvas>
+    <div class="legend">
+      <div><span class="dt" style="background:var(--yellow)"></span>数据点 (xᵢ, yᵢ)（点击添加 / 右键删）</div>
+      <div><span class="ln" style="border-color:var(--orange)"></span><b style="color:var(--orange)">最小二乘拟合</b>（直线 / 二次）</div>
+      <div><span class="ln" style="border-color:var(--red)"></span><b style="color:var(--red)">竖直残差</b> rᵢ = yᵢ − ŷᵢ</div>
+    </div>
+    <div class="hint"><b>动手（§4.7）：</b>在画布<b>左键点击</b>添加数据点（拖动可移动最近点），<b>右键</b>删除最近点。拟合线实时更新，红色竖线是每个点的<b>竖直残差</b>，其平方和 RSS 即被最小化的量。切换「直线 / 二次」看模型空间维度变化。</div>
+  </div>
+  <div class="panel">
+    <h2>模型</h2>
+    <div class="card">
+      <div class="seg">
+        <button id="md1" class="on" onclick="setModel(1)">直线 y = c₀ + c₁x</button>
+        <button id="md2" onclick="setModel(2)">二次 y = c₀+c₁x+c₂x²</button>
+      </div>
+      <label class="chk"><input type="checkbox" id="showRes" checked onchange="reqd2()">显示竖直残差</label>
+      <label class="chk"><input type="checkbox" id="showCol" onchange="reqd2()">显示「投影到列空间」几何视图</label>
+      <div class="presets" style="margin-top:6px">
+        <button class="b" onclick="seedData('line')">示例·线性</button>
+        <button class="b" onclick="seedData('quad')">示例·二次</button>
+        <button class="b" onclick="seedData('outlier')">含离群点</button>
+        <button class="b" onclick="clearData()">清空</button>
+      </div>
+    </div>
+    <h2>拟合系数 x̂ = (AᵀA)⁻¹Aᵀy</h2>
+    <div class="card">
+      <div class="stat"><span>c₀（截距）</span><span id="c0">–</span></div>
+      <div class="stat"><span>c₁（一次系数）</span><span id="c1">–</span></div>
+      <div class="stat" id="c2row"><span>c₂（二次系数）</span><span id="c2">–</span></div>
+    </div>
+    <h2>残差与正交性</h2>
+    <div class="card">
+      <div class="stat"><span>数据点数 m</span><span id="mN">–</span></div>
+      <div class="stat"><span>RSS = Σ rᵢ²（残差平方和）</span><span id="rss">–</span></div>
+      <div class="stat"><span>残差范数 ‖r‖ = √RSS</span><span id="rnorm">–</span></div>
+      <div class="stat"><span>RMSE = √(RSS/m)</span><span id="rmse">–</span></div>
+      <div class="stat"><span>R²（决定系数）</span><span id="r2">–</span></div>
+      <div class="stat"><span>‖Aᵀr‖∞（正规方程残差，应≈0）</span><span id="atrnorm">–</span></div>
+    </div>
+    <div class="card note">
+      <b>正文呼应（§4.7）：</b>把每个数据点的目标值堆成向量 <span class="y">y∈ℝᵐ</span>，把模型基（常数列、x 列、x² 列）堆成设计矩阵 <span class="c">A</span> 的列。最小化 ‖Ax−y‖² <b>就是</b>把 y <b>正交投影到列空间 col(A)</b>：拟合值 ŷ=Ax̂=Py 是 y 的影子，残差 r=y−ŷ <b>⊥ col(A)</b>，即 <span class="r">Aᵀr=0</span>——这正是<b>正规方程 AᵀA x̂=Aᵀy</b>。勾选「投影到列空间」可在画布下方看到这条几何（y、影子 ŷ、垂直残差）。<br><br>
+      <b>与折叠的连接：</b>拟合 NMR/SAXS/cryo-EM 观测、回归力场参数、从距离约束反推坐标，全是最小二乘；它还<b>等价于高斯噪声下的极大似然</b>（RSS = 负对数似然）。<span class="r">注意离群点</span>——试「含离群点」预设，看一个坏点（平方放大权重）如何把整条线带偏，这就是实战要鲁棒化/加权的原因。
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   工具：紧凑线性代数（小规模、稳健）
+   ============================================================ */
+// 解小型对称正定线性方程 M x = v（高斯消元 + 部分主元），返回 x 或 null（奇异）
+function solveLin(M, v){
+  const n = M.length;
+  // 构造增广矩阵副本
+  const A = M.map((row,i)=> row.concat([v[i]]));
+  for(let col=0; col<n; col++){
+    // 选主元（绝对值最大行）
+    let piv=col;
+    for(let r=col+1;r<n;r++) if(Math.abs(A[r][col])>Math.abs(A[piv][col])) piv=r;
+    if(Math.abs(A[piv][col])<1e-12) return null; // 奇异 / 退化
+    if(piv!==col){const t=A[piv];A[piv]=A[col];A[col]=t;}
+    // 消元
+    for(let r=0;r<n;r++){
+      if(r===col) continue;
+      const f=A[r][col]/A[col][col];
+      if(f===0) continue;
+      for(let c=col;c<=n;c++) A[r][c]-=f*A[col][c];
+    }
+  }
+  const x=new Array(n);
+  for(let i=0;i<n;i++) x[i]=A[i][n]/A[i][i];
+  return x;
+}
+// 通用最小二乘：给定设计矩阵 A(m×n) 与目标 y(m)，解正规方程返回系数 x̂(n)
+function leastSquares(A, y){
+  const m=A.length; if(m===0) return null;
+  const n=A[0].length;
+  // AtA (n×n), Aty (n)
+  const AtA=[], Aty=new Array(n).fill(0);
+  for(let i=0;i<n;i++){AtA.push(new Array(n).fill(0));}
+  for(let r=0;r<m;r++){
+    for(let i=0;i<n;i++){
+      Aty[i]+=A[r][i]*y[r];
+      for(let j=0;j<n;j++) AtA[i][j]+=A[r][i]*A[r][j];
+    }
+  }
+  return solveLin(AtA, Aty);
+}
+
+/* ============================================================
+   画布适配 devicePixelRatio
+   ============================================================ */
+function fit(cv){
+  const r=cv.getBoundingClientRect(), dpr=window.devicePixelRatio||1;
+  cv.width=Math.max(1,Math.round(r.width*dpr));
+  cv.height=Math.max(1,Math.round(r.height*dpr));
+  return {w:r.width,h:r.height,dpr};
+}
+
+/* ============================================================
+   VIEW 1 —— 投影到一条直线
+   世界坐标：以画布中心为原点，y 向上为正
+   ============================================================ */
+const cv1=document.getElementById('cv1'), x1=cv1.getContext('2d');
+const sl1={ax:el('ax'),ay:el('ay'),bx:el('bx'),by:el('by')};
+function el(id){return document.getElementById(id);}
+let view1={cx:0,cy:0,sc:40}; // 屏幕映射参数，draw 时更新
+let drag1=null; // 'a' | 'b' | null
+
+function preset1(k){
+  if(k==='reset'){sl1.ax.value=3;sl1.ay.value=1.2;sl1.bx.value=1.5;sl1.by.value=3.4;}
+  if(k==='perp'){ // 令 b 与 a 垂直：b = 旋转 a 90°（缩放到合适长度）
+    const ax=+sl1.ax.value, ay=+sl1.ay.value;
+    const L=Math.hypot(ax,ay)||1; const s=3/L;
+    sl1.bx.value=(-ay*s).toFixed(2); sl1.by.value=(ax*s).toFixed(2);
+  }
+  if(k==='para'){ // 令 b 与 a 平行
+    const ax=+sl1.ax.value, ay=+sl1.ay.value;
+    sl1.bx.value=(ax*0.8).toFixed(2); sl1.by.value=(ay*0.8).toFixed(2);
+  }
+  draw1();
+}
+
+function draw1(){
+  const a=[+sl1.ax.value,+sl1.ay.value], b=[+sl1.bx.value,+sl1.by.value];
+  el('vax').textContent=a[0].toFixed(2); el('vay').textContent=a[1].toFixed(2);
+  el('vbx').textContent=b[0].toFixed(2); el('vby').textContent=b[1].toFixed(2);
+
+  const {w,h,dpr}=fit(cv1); x1.setTransform(dpr,0,0,dpr,0,0); x1.clearRect(0,0,w,h);
+  const cx=w/2, cy=h/2, sc=Math.min(w,h)/14; // 世界单位 -> 像素
+  view1={cx,cy,sc};
+  const SX=(p)=>cx+p[0]*sc, SY=(p)=>cy-p[1]*sc;
+
+  // 网格
+  x1.strokeStyle='#1b1f2b'; x1.lineWidth=1;
+  for(let gx=-7;gx<=7;gx++){x1.beginPath();x1.moveTo(SX([gx,0]),0);x1.lineTo(SX([gx,0]),h);x1.stroke();}
+  for(let gy=-7;gy<=7;gy++){x1.beginPath();x1.moveTo(0,SY([0,gy]));x1.lineTo(w,SY([0,gy]));x1.stroke();}
+  // 坐标轴
+  x1.strokeStyle='#33394a'; x1.lineWidth=1.4;
+  x1.beginPath();x1.moveTo(0,cy);x1.lineTo(w,cy);x1.moveTo(cx,0);x1.lineTo(cx,h);x1.stroke();
+
+  // 直线 W = span{a}（沿 a 方向无限延伸，用虚线画整条直线）
+  const aL=Math.hypot(a[0],a[1]);
+  if(aL>1e-6){
+    const ua=[a[0]/aL,a[1]/aL]; const big=25;
+    const e1=[ua[0]*-big,ua[1]*-big], e2=[ua[0]*big,ua[1]*big];
+    x1.strokeStyle='rgba(245,166,35,.30)'; x1.lineWidth=2; x1.setLineDash([8,6]);
+    x1.beginPath(); x1.moveTo(SX(e1),SY(e1)); x1.lineTo(SX(e2),SY(e2)); x1.stroke();
+    x1.setLineDash([]);
+    x1.fillStyle='rgba(245,166,35,.7)'; x1.font='13px system-ui';
+    x1.fillText('直线 W = span{a}', SX(e2)-150, SY(e2)+ (ua[1]>0? 18 : -8));
+  }
+
+  // 计算投影
+  const ata=a[0]*a[0]+a[1]*a[1];
+  const atb=a[0]*b[0]+a[1]*b[1];
+  const c = ata>1e-9 ? atb/ata : 0;
+  const p=[c*a[0], c*a[1]];
+  const r=[b[0]-p[0], b[1]-p[1]];
+
+  // 残差 r（红线，从 p 到 b）
+  x1.strokeStyle='#ef6b73'; x1.lineWidth=2.5;
+  x1.beginPath(); x1.moveTo(SX(p),SY(p)); x1.lineTo(SX(b),SY(b)); x1.stroke();
+  // 直角标记（在 p 处，r 与 a 垂直）
+  if(aL>1e-6){
+    const ua=[a[0]/aL,a[1]/aL];
+    const rL=Math.hypot(r[0],r[1]);
+    if(rL>1e-4){
+      const ur=[r[0]/rL,r[1]/rL]; const d=0.55; // 方块边长（世界单位）
+      const c1=[p[0]+ua[0]*d, p[1]+ua[1]*d];
+      const c2=[c1[0]+ur[0]*d, c1[1]+ur[1]*d];
+      const c3=[p[0]+ur[0]*d, p[1]+ur[1]*d];
+      x1.strokeStyle='#7bd88f'; x1.lineWidth=1.6;
+      x1.beginPath();
+      x1.moveTo(SX(c1),SY(c1)); x1.lineTo(SX(c2),SY(c2)); x1.lineTo(SX(c3),SY(c3));
+      x1.stroke();
+    }
+  }
+
+  // 向量 a（橙色箭头）
+  arrow1([0,0], a, '#f5a623', 'a', SX, SY);
+  // 投影 p（青色箭头，画在 a 之上略细）
+  arrow1([0,0], p, '#22c7d6', null, SX, SY);
+
+  // b 点（黄色）与 a 端点手柄（橙）
+  drawDot(SX(b),SY(b), '#ffd166', 7, 'b');
+  drawDot(SX(p),SY(p), '#22c7d6', 5.5, 'p');
+  drawHandle(SX(a),SY(a), '#f5a623');
+
+  // 数值面板
+  el('cval').textContent=c.toFixed(3);
+  el('plen').textContent=Math.hypot(p[0],p[1]).toFixed(3);
+  el('atr').textContent=(a[0]*r[0]+a[1]*r[1]).toExponential(2);
+  // 投影矩阵 P = a aᵀ / aᵀa
+  let P=[[0,0],[0,0]];
+  if(ata>1e-9){
+    P=[[a[0]*a[0]/ata, a[0]*a[1]/ata],[a[1]*a[0]/ata, a[1]*a[1]/ata]];
+  }
+  el('P00').textContent=P[0][0].toFixed(3); el('P01').textContent=P[0][1].toFixed(3);
+  el('P10').textContent=P[1][0].toFixed(3); el('P11').textContent=P[1][1].toFixed(3);
+  // 幂等 P² - P
+  const P2=[
+    [P[0][0]*P[0][0]+P[0][1]*P[1][0], P[0][0]*P[0][1]+P[0][1]*P[1][1]],
+    [P[1][0]*P[0][0]+P[1][1]*P[1][0], P[1][0]*P[0][1]+P[1][1]*P[1][1]]
+  ];
+  let idem=0; for(let i=0;i<2;i++)for(let j=0;j<2;j++)idem+=Math.abs(P2[i][j]-P[i][j]);
+  el('idem').textContent=idem.toExponential(2);
+  el('symm').textContent=Math.abs(P[0][1]-P[1][0]).toExponential(2);
+  el('trP').textContent=(P[0][0]+P[1][1]).toFixed(3);
+  const bl=Math.hypot(b[0],b[1]), pl=Math.hypot(p[0],p[1]), rl=Math.hypot(r[0],r[1]);
+  el('blen').textContent=bl.toFixed(3);
+  el('pyth').textContent=(pl*pl+rl*rl).toFixed(3)+'  (‖b‖²='+(bl*bl).toFixed(3)+')';
+  el('rlen').textContent=rl.toFixed(3);
+  const cosang = (bl>1e-9&&aL>1e-9)? (atb/(bl*aL)) : 0;
+  el('ang1').textContent=(Math.acos(Math.max(-1,Math.min(1,cosang)))*180/Math.PI).toFixed(1)+'°';
+}
+// 从世界点 p0 到 p1 画箭头
+function arrow1(p0,p1,col,lab,SX,SY){
+  const x0=SX(p0),y0=SY(p0),x1p=SX(p1),y1p=SY(p1);
+  x1.strokeStyle=col; x1.fillStyle=col; x1.lineWidth=2.8;
+  x1.beginPath(); x1.moveTo(x0,y0); x1.lineTo(x1p,y1p); x1.stroke();
+  const ang=Math.atan2(y1p-y0, x1p-x0); const hs=11;
+  x1.beginPath();
+  x1.moveTo(x1p,y1p);
+  x1.lineTo(x1p-hs*Math.cos(ang-0.4), y1p-hs*Math.sin(ang-0.4));
+  x1.lineTo(x1p-hs*Math.cos(ang+0.4), y1p-hs*Math.sin(ang+0.4));
+  x1.closePath(); x1.fill();
+  if(lab){x1.font='bold 14px system-ui'; x1.fillText(lab, x1p+6, y1p-6);}
+}
+function drawDot(sx,sy,col,rad,lab){
+  x1.fillStyle=col; x1.beginPath(); x1.arc(sx,sy,rad,0,7); x1.fill();
+  if(lab){x1.fillStyle=col; x1.font='bold 14px system-ui'; x1.fillText(lab, sx+8, sy+5);}
+}
+function drawHandle(sx,sy,col){
+  x1.fillStyle=col; x1.strokeStyle='#0f1117'; x1.lineWidth=2;
+  x1.beginPath(); x1.arc(sx,sy,7,0,7); x1.fill(); x1.stroke();
+}
+// 鼠标 -> 世界坐标
+function toWorld1(e){
+  const r=cv1.getBoundingClientRect();
+  return [ (e.clientX-r.left-view1.cx)/view1.sc, -(e.clientY-r.top-view1.cy)/view1.sc ];
+}
+cv1.addEventListener('mousedown', e=>{
+  const wp=toWorld1(e); const a=[+sl1.ax.value,+sl1.ay.value], b=[+sl1.bx.value,+sl1.by.value];
+  const da=Math.hypot(wp[0]-a[0],wp[1]-a[1]), db=Math.hypot(wp[0]-b[0],wp[1]-b[1]);
+  const thr=0.5; // 抓取半径（世界单位）
+  if(db<=da && db<thr) drag1='b';
+  else if(da<thr) drag1='a';
+  else drag1='b'; // 空白处拖也当作移动 b
+  if(drag1){cv1.style.cursor='grabbing'; updateDrag1(wp);}
+});
+window.addEventListener('mousemove', e=>{ if(drag1) updateDrag1(toWorld1(e)); });
+window.addEventListener('mouseup', ()=>{ drag1=null; cv1.style.cursor='grab'; });
+function updateDrag1(wp){
+  const cl=(v)=>Math.max(-6,Math.min(6,v));
+  if(drag1==='a'){sl1.ax.value=cl(wp[0]).toFixed(2); sl1.ay.value=cl(wp[1]).toFixed(2);}
+  else if(drag1==='b'){sl1.bx.value=cl(wp[0]).toFixed(2); sl1.by.value=cl(wp[1]).toFixed(2);}
+  draw1();
+}
+Object.values(sl1).forEach(s=>s.addEventListener('input', draw1));
+
+/* ============================================================
+   VIEW 2 —— 散点最小二乘拟合
+   数据存为世界坐标 (x,y)，世界范围约 [-5,5]×[-4,4]
+   ============================================================ */
+const cv2=document.getElementById('cv2'), x2=cv2.getContext('2d');
+let data2=[]; let model2=1; // 1=直线 2=二次
+let view2={cx:0,cy:0,scx:40,scy:40};
+let needDraw2=true;
+let drag2=-1; // 拖动的数据点索引
+
+function setModel(m){
+  model2=m;
+  el('md1').classList.toggle('on', m===1);
+  el('md2').classList.toggle('on', m===2);
+  el('c2row').style.display = (m===2)?'flex':'none';
+  reqd2();
+}
+function reqd2(){ needDraw2=true; }
+function clearData(){ data2=[]; reqd2(); }
+function randn(){let u=0,v=0;while(u===0)u=Math.random();while(v===0)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+function seedData(kind){
+  data2=[];
+  if(kind==='line'){
+    for(let i=0;i<14;i++){const xx=-4+i*0.6; data2.push([xx, 0.7*xx+0.3+randn()*0.6]);}
+  } else if(kind==='quad'){
+    for(let i=0;i<16;i++){const xx=-4+i*0.55; data2.push([xx, -0.28*xx*xx+0.4*xx+2.2+randn()*0.4]);}
+    setModel(2); return; // setModel 会触发重绘
+  } else if(kind==='outlier'){
+    for(let i=0;i<12;i++){const xx=-4+i*0.7; data2.push([xx, 0.6*xx+0.2+randn()*0.4]);}
+    data2.push([0.5, -3.6]); // 一个离群点
+  }
+  reqd2();
+}
+// 构造设计矩阵的某一行（基函数）
+function basisRow(xx){
+  return model2===1 ? [1, xx] : [1, xx, xx*xx];
+}
+function evalModel(coef, xx){
+  if(!coef) return 0;
+  return model2===1 ? coef[0]+coef[1]*xx : coef[0]+coef[1]*xx+coef[2]*xx*xx;
+}
+
+function draw2(){
+  const {w,h,dpr}=fit(cv2); x2.setTransform(dpr,0,0,dpr,0,0); x2.clearRect(0,0,w,h);
+  const showCol=el('showCol').checked;
+  // 主拟合区占上方（或全部）
+  const mainH = showCol ? h*0.62 : h;
+  const cx=w*0.5, cy=mainH*0.5;
+  const scx=Math.min(w,mainH)/12, scy=Math.min(w,mainH)/12;
+  view2={cx,cy,scx,scy,mainH};
+  const SX=(xx)=>cx+xx*scx, SY=(yy)=>cy-yy*scy;
+
+  // 网格
+  x2.strokeStyle='#1b1f2b'; x2.lineWidth=1;
+  for(let gx=-6;gx<=6;gx++){x2.beginPath();x2.moveTo(SX(gx),0);x2.lineTo(SX(gx),mainH);x2.stroke();}
+  for(let gy=-6;gy<=6;gy++){x2.beginPath();x2.moveTo(0,SY(gy));x2.lineTo(w,SY(gy));x2.stroke();}
+  x2.strokeStyle='#33394a'; x2.lineWidth=1.4;
+  x2.beginPath();x2.moveTo(0,SY(0));x2.lineTo(w,SY(0));x2.moveTo(SX(0),0);x2.lineTo(SX(0),mainH);x2.stroke();
+
+  // 拟合
+  const m=data2.length;
+  let coef=null, A=[], y=[];
+  const need = model2===1?2:3;
+  if(m>=need){
+    A=data2.map(d=>basisRow(d[0]));
+    y=data2.map(d=>d[1]);
+    coef=leastSquares(A,y);
+  }
+
+  // 残差竖线
+  const showRes=el('showRes').checked;
+  if(coef && showRes){
+    x2.strokeStyle='#ef6b73'; x2.lineWidth=1.8;
+    data2.forEach(d=>{
+      const yhat=evalModel(coef,d[0]);
+      x2.beginPath(); x2.moveTo(SX(d[0]),SY(d[1])); x2.lineTo(SX(d[0]),SY(yhat)); x2.stroke();
+    });
+  }
+  // 拟合曲线
+  if(coef){
+    x2.strokeStyle='#f5a623'; x2.lineWidth=2.6;
+    x2.beginPath();
+    let first=true;
+    for(let px=0;px<=w;px+=3){
+      const xx=(px-cx)/scx; const yy=evalModel(coef,xx);
+      const sy=SY(yy);
+      if(first){x2.moveTo(px,sy);first=false;} else x2.lineTo(px,sy);
+    }
+    x2.stroke();
+  } else {
+    x2.fillStyle='#9aa0b4'; x2.font='14px system-ui';
+    x2.fillText('至少需要 '+need+' 个点才能拟合（点击画布添加）', 20, 28);
+  }
+  // 数据点 + 拟合值小蓝点
+  data2.forEach(d=>{
+    if(coef){
+      const yhat=evalModel(coef,d[0]);
+      x2.fillStyle='#22c7d6'; x2.beginPath(); x2.arc(SX(d[0]),SY(yhat),3,0,7); x2.fill();
+    }
+    x2.fillStyle='#ffd166'; x2.strokeStyle='#0f1117'; x2.lineWidth=1.5;
+    x2.beginPath(); x2.arc(SX(d[0]),SY(d[1]),5.5,0,7); x2.fill(); x2.stroke();
+  });
+
+  // ===== 下方：投影到列空间几何视图 =====
+  if(showCol){
+    drawColSpace(w, mainH, h, coef, A, y);
+  }
+
+  // ===== 读数 =====
+  el('mN').textContent=m;
+  if(coef){
+    el('c0').textContent=coef[0].toFixed(4);
+    el('c1').textContent=coef[1].toFixed(4);
+    el('c2').textContent= model2===2 ? coef[2].toFixed(4) : '–';
+    // 残差与统计
+    let rss=0; const res=[];
+    data2.forEach(d=>{const rr=d[1]-evalModel(coef,d[0]); res.push(rr); rss+=rr*rr;});
+    el('rss').textContent=rss.toFixed(4);
+    el('rnorm').textContent=Math.sqrt(rss).toFixed(4);
+    el('rmse').textContent=Math.sqrt(rss/m).toFixed(4);
+    // R²
+    let my=0; y.forEach(v=>my+=v); my/=m;
+    let tss=0; y.forEach(v=>tss+=(v-my)*(v-my));
+    el('r2').textContent= tss>1e-9 ? (1-rss/tss).toFixed(4) : '1.0000';
+    // Aᵀr 无穷范数
+    const n=A[0].length; let atrmax=0;
+    for(let j=0;j<n;j++){let s=0;for(let i=0;i<m;i++)s+=A[i][j]*res[i]; atrmax=Math.max(atrmax,Math.abs(s));}
+    el('atrnorm').textContent=atrmax.toExponential(2);
+  } else {
+    ['c0','c1','c2','rss','rnorm','rmse','r2','atrnorm'].forEach(id=>el(id).textContent='–');
+  }
+}
+
+// 列空间几何示意：把高维 y 与影子 ŷ 用「平行四边形」概念示意性画出（2D 投影插画）
+function drawColSpace(w, top, h, coef, A, y){
+  const y0=top+1, bandH=h-top;
+  x2.fillStyle='#0d0f15'; x2.fillRect(0,y0,w,bandH);
+  x2.strokeStyle='#2b3040'; x2.beginPath(); x2.moveTo(0,y0); x2.lineTo(w,y0); x2.stroke();
+  const cx=w*0.30, cy=y0+bandH*0.55;
+  x2.fillStyle='#9aa0b4'; x2.font='12.5px system-ui';
+  x2.fillText('几何解读：把 y∈ℝᵐ 正交投影到列空间 col(A) → 影子 ŷ，残差 r=y−ŷ ⊥ col(A)', 14, y0+20);
+
+  if(!coef){return;}
+  // 计算 ŷ, r 的范数用于按比例画
+  const m=y.length; const yhat=A.map(row=>row.reduce((s,v,j)=>s+v*coef[j],0));
+  let nyh=0,nr=0; for(let i=0;i<m;i++){nyh+=yhat[i]*yhat[i]; nr+=(y[i]-yhat[i])*(y[i]-yhat[i]);}
+  nyh=Math.sqrt(nyh); nr=Math.sqrt(nr);
+  const scale = Math.min(180/(Math.max(nyh,nr)+1e-6), 60);
+  // 列空间画成一条水平「平面」线（用一条带阴影的横条表示子空间）
+  const planeY=cy+10;
+  x2.fillStyle='rgba(34,199,214,.12)';
+  x2.fillRect(cx-30, planeY-4, 320, 8);
+  x2.strokeStyle='rgba(34,199,214,.55)'; x2.lineWidth=2;
+  x2.beginPath(); x2.moveTo(cx-30,planeY); x2.lineTo(cx+290,planeY); x2.stroke();
+  x2.fillStyle='#22c7d6'; x2.font='12px system-ui'; x2.fillText('col(A)（模型空间）', cx+150, planeY+22);
+
+  // ŷ 沿子空间方向（水平）
+  const yhX=cx + Math.min(260, nyh*scale);
+  // y 在子空间上方（残差竖直）
+  const rPix=Math.min(110, nr*scale);
+  const yTopY=planeY - rPix;
+  // ŷ 箭头（青）
+  drawArr2(cx, planeY, yhX, planeY, '#22c7d6');
+  x2.fillStyle='#22c7d6'; x2.fillText('ŷ = Py（影子）', (cx+yhX)/2-30, planeY-8);
+  // y 箭头（黄，从原点到 yhX,yTopY）
+  drawArr2(cx, planeY, yhX, yTopY, '#ffd166');
+  x2.fillStyle='#ffd166'; x2.fillText('y（观测）', yhX+8, yTopY-2);
+  // 残差 r（红，竖直从 ŷ 到 y）
+  drawArr2(yhX, planeY, yhX, yTopY, '#ef6b73');
+  x2.fillStyle='#ef6b73'; x2.fillText('r = y−ŷ ⊥ col(A)', yhX+8, (planeY+yTopY)/2);
+  // 直角标记
+  const d=10;
+  x2.strokeStyle='#7bd88f'; x2.lineWidth=1.5;
+  x2.beginPath(); x2.moveTo(yhX-d,planeY); x2.lineTo(yhX-d,planeY-d); x2.lineTo(yhX,planeY-d); x2.stroke();
+  // 数值
+  x2.fillStyle='#9aa0b4'; x2.font='12px system-ui';
+  x2.fillText('‖y‖='+Math.hypot(nyh,nr).toFixed(3)+'   ‖ŷ‖='+nyh.toFixed(3)+'   ‖r‖='+nr.toFixed(3)
+    +'   勾股 ‖ŷ‖²+‖r‖²='+(nyh*nyh+nr*nr).toFixed(3), 14, y0+bandH-12);
+}
+function drawArr2(x0,y0,x1p,y1p,col){
+  x2.strokeStyle=col; x2.fillStyle=col; x2.lineWidth=2.4;
+  x2.beginPath(); x2.moveTo(x0,y0); x2.lineTo(x1p,y1p); x2.stroke();
+  const ang=Math.atan2(y1p-y0,x1p-x0); const hs=9;
+  x2.beginPath(); x2.moveTo(x1p,y1p);
+  x2.lineTo(x1p-hs*Math.cos(ang-0.4), y1p-hs*Math.sin(ang-0.4));
+  x2.lineTo(x1p-hs*Math.cos(ang+0.4), y1p-hs*Math.sin(ang+0.4));
+  x2.closePath(); x2.fill();
+}
+
+// 鼠标 -> 世界坐标（仅主区有效）
+function toWorld2(e){
+  const r=cv2.getBoundingClientRect();
+  return { x:(e.clientX-r.left-view2.cx)/view2.scx,
+           y:-(e.clientY-r.top-view2.cy)/view2.scy,
+           rawY:(e.clientY-r.top) };
+}
+function nearestPt(wx,wy){
+  let best=-1, bd=0.5; // 抓取半径（世界单位）
+  data2.forEach((d,i)=>{const dd=Math.hypot(d[0]-wx,d[1]-wy); if(dd<bd){bd=dd;best=i;}});
+  return best;
+}
+cv2.addEventListener('contextmenu', e=>{
+  e.preventDefault();
+  const wp=toWorld2(e); if(wp.rawY>view2.mainH) return;
+  const idx=nearestPt(wp.x,wp.y);
+  if(idx>=0){ data2.splice(idx,1); reqd2(); }
+});
+cv2.addEventListener('mousedown', e=>{
+  if(e.button!==0) return;
+  const wp=toWorld2(e); if(wp.rawY>view2.mainH) return; // 下方几何区不交互
+  const idx=nearestPt(wp.x,wp.y);
+  if(idx>=0){ drag2=idx; cv2.style.cursor='grabbing'; }
+  else { data2.push([wp.x, wp.y]); reqd2(); } // 空白处点击 = 添加点
+});
+window.addEventListener('mousemove', e=>{
+  if(drag2<0) return;
+  const wp=toWorld2(e);
+  data2[drag2]=[Math.max(-6,Math.min(6,wp.x)), Math.max(-6,Math.min(6,wp.y))];
+  reqd2();
+});
+window.addEventListener('mouseup', ()=>{ if(drag2>=0){drag2=-1; cv2.style.cursor='crosshair';} });
+
+/* ============================================================
+   标签切换 + 动画循环
+   ============================================================ */
+let curTab=1;
+function showTab(n){
+  curTab=n;
+  el('view1').classList.toggle('active', n===1);
+  el('view2').classList.toggle('active', n===2);
+  el('tab1').classList.toggle('active', n===1);
+  el('tab2').classList.toggle('active', n===2);
+  if(n===1) draw1(); else { needDraw2=true; }
+}
+window.addEventListener('resize', ()=>{ if(curTab===1) draw1(); else needDraw2=true; });
+
+// VIEW2 用 rAF 节流重绘（仅在 needDraw2 时）
+function loop2(){
+  if(curTab===2 && needDraw2){ needDraw2=false; draw2(); }
+  requestAnimationFrame(loop2);
+}
+
+/* 初始化 */
+setModel(1);
+seedData('line');
+draw1();
+requestAnimationFrame(loop2);
+</script>
+</body>
+</html>

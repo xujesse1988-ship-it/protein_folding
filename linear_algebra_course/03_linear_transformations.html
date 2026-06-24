@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>二维线性变换沙盘 · 矩阵 = 变换 —— 配套第 3 章</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a24; --panel2:#1f2330; --line:#2b3040;
+    --text:#e7e9f0; --dim:#9aa0b4;
+    --orange:#f5a623;  /* e1 / 第 1 列 */
+    --cyan:#22c7d6;    /* e2 / 第 2 列 */
+    --yellow:#ffd166;  /* 单位圆 → 椭圆 / 特征方向 1 */
+    --violet:#b388ff;  /* 特征方向 2 */
+    --red:#ef6b73;     /* 警示 / det<0 */
+    --green:#7bd88f;   /* det>0 */
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;}
+  header{padding:13px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{margin:0;font-size:18px;letter-spacing:.3px}
+  header h1 .c{color:var(--cyan)} header h1 .o{color:var(--orange)}
+  header p{margin:5px 0 0;color:var(--dim);font-size:13px;line-height:1.65}
+  header p b{color:#fff}
+  .wrap{display:flex;height:calc(100% - 78px);min-height:0}
+  .stage{position:relative;flex:1 1 auto;min-width:0;overflow:hidden;
+    background:radial-gradient(circle at 48% 46%,#161a26 0%,#0d0f15 84%)}
+  #cv{display:block;width:100%;height:100%;cursor:crosshair}
+  .legend{position:absolute;left:14px;top:12px;font-size:12.5px;pointer-events:none;
+    background:rgba(15,17,23,.62);padding:8px 11px;border-radius:8px;border:1px solid var(--line);line-height:1.9}
+  .legend .bar{display:inline-block;width:16px;height:9px;border-radius:3px;margin-right:6px;vertical-align:middle}
+  .legend .ln{display:inline-block;width:18px;height:0;border-top:3px solid;margin-right:6px;vertical-align:middle}
+  .legend .dn{display:inline-block;width:18px;height:0;border-top:3px dashed;margin-right:6px;vertical-align:middle}
+  .legend .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:middle}
+  .hint{position:absolute;left:14px;bottom:12px;color:var(--dim);font-size:12px;pointer-events:none;
+    background:rgba(15,17,23,.55);padding:6px 10px;border-radius:8px;border:1px solid var(--line);max-width:580px;line-height:1.6}
+  .panel{flex:0 0 420px;max-width:55%;overflow-y:auto;border-left:1px solid var(--line);background:var(--panel);padding:16px}
+  .panel h2{font-size:14px;margin:18px 0 8px;color:#fff}
+  .panel h2:first-child{margin-top:0}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+  button{background:#262b3a;color:var(--text);border:1px solid var(--line);border-radius:8px;
+    padding:7px 11px;font-size:13px;cursor:pointer}
+  button:hover{filter:brightness(1.13)}
+  button.active{background:#2f3a4f;border-color:var(--cyan);color:#fff}
+  .row{display:flex;align-items:center;gap:10px;margin:9px 0}
+  .row label{flex:0 0 64px;font-weight:600;font-size:13px}
+  input[type=range]{flex:1 1 auto;accent-color:var(--cyan)}
+  .val{flex:0 0 56px;text-align:right;font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px}
+  .stat{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px dashed #2b3040}
+  .stat:last-child{border-bottom:none}
+  .stat span:last-child{color:#fff;font-variant-numeric:tabular-nums}
+  .note{font-size:12.5px;color:var(--dim);line-height:1.85}
+  .note b{color:#e7e9f0}
+  .note .o{color:var(--orange)} .note .c{color:var(--cyan)} .note .y{color:var(--yellow)}
+  .note .v{color:var(--violet)} .note .r{color:var(--red)} .note .g{color:var(--green)}
+  code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#cdd6f4}
+  .modebar{display:flex;gap:8px;margin-bottom:12px}
+  .modebar button{flex:1 1 0}
+  .presets{display:flex;flex-wrap:wrap;gap:6px}
+  .presets button{flex:1 1 30%;font-size:12px;padding:6px 4px}
+  /* matrix display */
+  .mat{display:flex;align-items:center;gap:8px;justify-content:center;margin:8px 0 4px;
+    font-variant-numeric:tabular-nums}
+  .mat .lab{color:var(--dim);font-size:13px}
+  .mat .brk{font-size:42px;color:var(--dim);font-weight:200;line-height:.9}
+  .mat .cols{display:flex;gap:14px}
+  .mat .col{display:flex;flex-direction:column;gap:5px}
+  .mat .cell{width:48px;text-align:center;font-size:15px}
+  .mat .c1 .cell{color:var(--orange)} .mat .c2 .cell{color:var(--cyan)}
+  .badge{display:inline-block;padding:1px 7px;border-radius:6px;font-size:12px;font-weight:600;margin-left:6px}
+  .badge.pos{background:rgba(123,216,143,.16);color:var(--green)}
+  .badge.neg{background:rgba(239,107,115,.16);color:var(--red)}
+  .badge.zero{background:rgba(245,166,35,.16);color:var(--orange)}
+  .toggles{display:flex;flex-wrap:wrap;gap:10px;font-size:12.5px}
+  .toggles label{display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--dim)}
+  .toggles input{accent-color:var(--cyan)}
+  .matlabel{font-size:12px;color:var(--dim);text-align:center;margin:2px 0 6px}
+  .matlabel b{color:#fff}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="o">二维线性变换沙盘</span> · 把矩阵<span class="c">「看活」</span>为变换</h1>
+  <p>拖右侧滑块或直接在画布里拖两个箭头，实时看 <b>网格 / 单位正方形 / 一团「蛋白点云」</b> 被矩阵 A 拉伸·旋转·剪切·翻转。底色显示 <b>det = 有向面积</b>（正负 = 是否翻手性）、是否可逆，以及（若存在实特征值）被「钉住」的<b>特征方向</b>。配套《线性代数深度入门》第 3 章 §3.2「二维几何动物园」与 §3.3「矩阵乘法 = 复合」。折叠连接：把点云想成一段刚体氨基酸坐标，旋转 / 反射就是叠合两条链的操作，det&lt;0 = 手性翻转（左右手不可叠合）。</p>
+</header>
+<div class="wrap">
+  <div class="stage">
+    <canvas id="cv"></canvas>
+    <div class="legend" id="legend"></div>
+    <div class="hint" id="hint"></div>
+  </div>
+  <div class="panel">
+    <div class="modebar">
+      <button id="mbSingle" class="active">单矩阵 A</button>
+      <button id="mbCompose">复合 AB vs BA</button>
+    </div>
+
+    <!-- ======== 单矩阵模式 ======== -->
+    <div id="paneSingle">
+      <h2>矩阵 A（按列输入）</h2>
+      <div class="card">
+        <div class="mat">
+          <span class="lab">A =</span>
+          <span class="brk">[</span>
+          <div class="cols">
+            <div class="col c1"><div class="cell" id="cA">1.00</div><div class="cell" id="cC">0.00</div></div>
+            <div class="col c2"><div class="cell" id="cB">0.00</div><div class="cell" id="cD">1.00</div></div>
+          </div>
+          <span class="brk">]</span>
+        </div>
+        <div class="note" style="text-align:center">左列(<span class="o">橙</span>)= e₁ 去向，右列(<span class="c">青</span>)= e₂ 去向；可直接拖画布里的箭头头部</div>
+        <div class="row"><label style="color:var(--orange)">a (1,1)</label><input id="sA" type="range" min="-3" max="3" step="0.05" value="1"><span class="val" id="vA">1.00</span></div>
+        <div class="row"><label style="color:var(--cyan)">b (1,2)</label><input id="sB" type="range" min="-3" max="3" step="0.05" value="0"><span class="val" id="vB">0.00</span></div>
+        <div class="row"><label style="color:var(--orange)">c (2,1)</label><input id="sC" type="range" min="-3" max="3" step="0.05" value="0"><span class="val" id="vC">0.00</span></div>
+        <div class="row"><label style="color:var(--cyan)">d (2,2)</label><input id="sD" type="range" min="-3" max="3" step="0.05" value="1"><span class="val" id="vD">1.00</span></div>
+      </div>
+
+      <h2>几何体检报告</h2>
+      <div class="card">
+        <div class="stat"><span>det A（有向面积，含符号）</span><span id="oDet">1.00</span></div>
+        <div class="stat"><span>|det A|（面积倍数）</span><span id="oADet">1.00</span></div>
+        <div class="stat"><span>定向 / 手性</span><span id="oOri">保持（det&gt;0）</span></div>
+        <div class="stat"><span>是否可逆</span><span id="oInv">可逆</span></div>
+        <div class="stat"><span>秩 rank</span><span id="oRank">2</span></div>
+        <div class="stat"><span>特征值 λ₁, λ₂</span><span id="oLam">1.00, 1.00</span></div>
+        <div class="stat"><span>奇异值 σ₁ ≥ σ₂</span><span id="oSig">1.00, 1.00</span></div>
+        <div class="stat"><span>条件数 κ = σ₁/σ₂</span><span id="oCond">1.00</span></div>
+        <div class="note" id="oVerdict" style="margin-top:8px"></div>
+      </div>
+
+      <h2>动物园预设（§3.2）</h2>
+      <div class="card">
+        <div class="presets">
+          <button data-m="rot60">旋转 60°</button>
+          <button data-m="2,0,0,2">缩放 2I</button>
+          <button data-m="2,0,0,0.5">各向异性</button>
+          <button data-m="1,0.8,0,1">剪切</button>
+          <button data-m="1,0,0,-1">反射(x轴)</button>
+          <button data-m="1,0,0,0">投影到 x 轴</button>
+          <button data-m="1,1,1,1">奇异(秩1)</button>
+          <button data-m="1,0,0,1">恒等 I</button>
+          <button data-m="0,1,1,0">反射 y=x</button>
+        </div>
+        <div class="row" style="margin-top:12px"><label style="flex-basis:64px">旋转角</label>
+          <input id="sRot" type="range" min="-180" max="180" step="1" value="0"><span class="val" id="vRot">0°</span></div>
+        <div class="note">「旋转角」滑块直接生成纯旋转 R(θ)，覆盖当前矩阵——验证旋转矩阵两列 = (cosθ,sinθ) 与 (−sinθ,cosθ)、det≡1、保长保角（§3.2.2 / §3.4.4）。</div>
+      </div>
+
+      <h2>显示</h2>
+      <div class="card">
+        <div class="toggles">
+          <label><input type="checkbox" id="tGrid" checked> 变换后网格</label>
+          <label><input type="checkbox" id="tSquare" checked> 单位正方形</label>
+          <label><input type="checkbox" id="tCircle" checked> 单位圆→椭圆</label>
+          <label><input type="checkbox" id="tBasis" checked> 列向量箭头</label>
+          <label><input type="checkbox" id="tGhost" checked> 原始网格(虚)</label>
+          <label><input type="checkbox" id="tCloud" checked> 蛋白点云(原像→像)</label>
+          <label><input type="checkbox" id="tEig" checked> 特征方向(若实)</label>
+        </div>
+      </div>
+
+      <h2>怎么读这张图</h2>
+      <div class="card note">
+        <p><b>核心口诀</b>：A 的第 1 列就是它把 <span class="o">e₁=(1,0)</span> 送到的位置，第 2 列就是把 <span class="c">e₂=(0,1)</span> 送到的位置。两箭头撑起的平行四边形 = 单位正方形的去向，其有向面积 = <code>det A</code>（§3.1.1）。</p>
+        <p><b>det 的两件事</b>：<span class="g">|det|</span> = 面积放大 / 缩小倍数；<span class="r">符号</span> = 是否翻面（&lt;0 = 镜像 / 手性翻转，正方形染红、点云镂空）；<span class="o">det=0</span> = 压扁成线 / 点（奇异、不可逆、信息丢失，§3.6）。</p>
+        <p><b>蛋白点云</b>：半透明灰点是原像（一小团「氨基酸」坐标），彩点是它们经 A 的像——直观看到整团结构被怎样搬动、形变、翻面。</p>
+        <p><b>特征方向</b>（§3.3 衔接第 6 章）：黄 / 紫虚线是不被「转向」的方向——落在其上的向量只被纯数乘 λ。纯旋转时它们消失（复特征值，无实不变方向）；对称阵时它们互相正交。</p>
+        <p><b>圆 → 椭圆</b>：黄色椭圆两半轴 = 奇异值 σ₁,σ₂（第 8 章 SVD 几何预演）。κ=σ₁/σ₂ 越大越「病态」(§3.6.2)。</p>
+      </div>
+    </div>
+
+    <!-- ======== 复合模式 ======== -->
+    <div id="paneCompose" class="hidden">
+      <h2>复合：AB ≠ BA（§3.3.3）</h2>
+      <div class="card note">
+        矩阵乘法 = 变换的<b>复合</b>：<code>AB</code> 表示「<b>先做 B，再做 A</b>」。一般 <span class="r">AB ≠ BA</span>——做事顺序不可换。下面用同一团蛋白点云分别走 <b style="color:var(--cyan)">AB</b>（先 B 后 A）和 <b style="color:var(--orange)">BA</b>（先 A 后 B），左右画布对照，差异一眼可见。
+      </div>
+
+      <div class="card">
+        <div class="matlabel">矩阵 <b style="color:var(--orange)">A</b></div>
+        <div class="row"><label style="color:var(--orange)">a₁₁</label><input id="qA" type="range" min="-3" max="3" step="0.05" value="0"><span class="val" id="wA">0.00</span></div>
+        <div class="row"><label style="color:var(--orange)">a₁₂</label><input id="qB" type="range" min="-3" max="3" step="0.05" value="-1"><span class="val" id="wB">-1.00</span></div>
+        <div class="row"><label style="color:var(--orange)">a₂₁</label><input id="qC" type="range" min="-3" max="3" step="0.05" value="1"><span class="val" id="wC">1.00</span></div>
+        <div class="row"><label style="color:var(--orange)">a₂₂</label><input id="qD" type="range" min="-3" max="3" step="0.05" value="0"><span class="val" id="wD">0.00</span></div>
+      </div>
+      <div class="card">
+        <div class="matlabel">矩阵 <b style="color:var(--cyan)">B</b></div>
+        <div class="row"><label style="color:var(--cyan)">b₁₁</label><input id="rA" type="range" min="-3" max="3" step="0.05" value="1"><span class="val" id="xA">1.00</span></div>
+        <div class="row"><label style="color:var(--cyan)">b₁₂</label><input id="rB" type="range" min="-3" max="3" step="0.05" value="1"><span class="val" id="xB">1.00</span></div>
+        <div class="row"><label style="color:var(--cyan)">b₂₁</label><input id="rC" type="range" min="-3" max="3" step="0.05" value="0"><span class="val" id="xC">0.00</span></div>
+        <div class="row"><label style="color:var(--cyan)">b₂₂</label><input id="rD" type="range" min="-3" max="3" step="0.05" value="1"><span class="val" id="xD">1.00</span></div>
+        <div class="presets" style="margin-top:10px">
+          <button data-c="rotshear">旋转·剪切</button>
+          <button data-c="scaleshear">缩放·剪切</button>
+          <button data-c="refrot">反射·旋转</button>
+          <button data-c="commute">可交换(同对角)</button>
+        </div>
+      </div>
+
+      <h2>乘积结果</h2>
+      <div class="card">
+        <div class="matlabel"><b style="color:var(--cyan)">AB</b>（先 B 后 A）</div>
+        <div class="mat">
+          <span class="brk">[</span>
+          <div class="cols">
+            <div class="col c2"><div class="cell" id="abA">—</div><div class="cell" id="abC">—</div></div>
+            <div class="col c2"><div class="cell" id="abB">—</div><div class="cell" id="abD">—</div></div>
+          </div>
+          <span class="brk">]</span>
+        </div>
+        <div class="matlabel" style="margin-top:10px"><b style="color:var(--orange)">BA</b>（先 A 后 B）</div>
+        <div class="mat">
+          <span class="brk">[</span>
+          <div class="cols">
+            <div class="col c1"><div class="cell" id="baA">—</div><div class="cell" id="baC">—</div></div>
+            <div class="col c1"><div class="cell" id="baB">—</div><div class="cell" id="baD">—</div></div>
+          </div>
+          <span class="brk">]</span>
+        </div>
+        <div class="stat" style="margin-top:8px"><span>AB − BA 是否为 0？</span><span id="oComm">—</span></div>
+        <div class="stat"><span>‖AB − BA‖（差异大小）</span><span id="oCommN">—</span></div>
+        <div class="note" id="oCommV" style="margin-top:8px"></div>
+      </div>
+
+      <h2>怎么读</h2>
+      <div class="card note">
+        <p><b>左画布</b> 蓝点 = 点云经 <span class="c">AB</span>（先 B 后 A）；<b>右画布</b> 橙点 = 经 <span class="o">BA</span>（先 A 后 B）。两者只要 A、B 不可交换，落点就不同——这就是「顺序重要」的几何证据（§3.3.3）。</p>
+        <p>点「可交换」预设把 A、B 设成同一对角型，此时 AB=BA、两画布重合：可交换是<b>例外</b>（同时对角化 / 同特征基，第 6 章）。</p>
+        <p>注意 <code>det(AB)=det(BA)=det A·det B</code> 永远相等——面积倍数与顺序无关，但<b>形状 / 朝向</b>不同（§3.3 与第 6 章 §6.1）。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const legendEl = document.getElementById('legend');
+const hintEl = document.getElementById('hint');
+
+let mode = 'single';                 // 'single' | 'compose'
+// 单矩阵：列存 [a c ; b d]（a,c=第1列；b,d=第2列），即 A=[[a,b],[c,d]]
+let M = {a:1,b:0,c:0,d:1};
+// 复合：A、B 两矩阵（同样 row-major 字段 a,b,c,d）
+let A = {a:0,b:-1,c:1,d:0};          // 旋转 90°
+let B = {a:1,b:1,c:0,d:1};           // 剪切
+let DPR = 1, W=0, H=0, scale=60;     // 像素/单位
+
+// 生成一团「蛋白点云」：一个略带方向性的椭圆斑 + 一条小链，便于看朝向/手性
+const CLOUD = (function(){
+  const pts=[];
+  let seed=20240624;
+  const rnd=()=>{ seed=(seed*1103515245+12345)&0x7fffffff; return seed/0x7fffffff; };
+  // 椭圆团（沿 x 略长，便于看旋转/剪切）
+  for(let i=0;i<90;i++){
+    const a=rnd()*2*Math.PI, r=Math.sqrt(rnd());
+    pts.push([0.6 + 1.0*r*Math.cos(a), 0.4 + 0.55*r*Math.sin(a)]);
+  }
+  // 一条小「主链」折线，明显带手性（L 形拐角）
+  const chain=[[ -1.6,-0.2],[-1.0,0.3],[-0.4,0.1],[-0.2,0.9],[0.3,1.1]];
+  return {blob:pts, chain:chain};
+})();
+
+function resize(){
+  DPR = window.devicePixelRatio||1;
+  const r = cv.getBoundingClientRect();
+  W = r.width; H = r.height;
+  cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  scale = Math.max(34, Math.min(W,H)/9);
+  draw();
+}
+window.addEventListener('resize', resize);
+
+// ---------- 数学 ----------
+function apply(m,x,y){ return [m.a*x + m.b*y, m.c*x + m.d*y]; }
+function det(m){ return m.a*m.d - m.b*m.c; }
+function tr(m){ return m.a + m.d; }
+// 矩阵乘 P*Q（row-major），返回 row-major 对象
+function mul(P,Q){
+  return {
+    a: P.a*Q.a + P.b*Q.c,
+    b: P.a*Q.b + P.b*Q.d,
+    c: P.c*Q.a + P.d*Q.c,
+    d: P.c*Q.b + P.d*Q.d
+  };
+}
+function rank(m){
+  const eps=1e-6;
+  const c0=Math.hypot(m.a,m.c), c1=Math.hypot(m.b,m.d);
+  if(c0<eps && c1<eps) return 0;
+  if(Math.abs(det(m))>eps) return 2;
+  return 1;
+}
+// 2x2 实特征值与特征方向；复数返回 complex:true
+function eig(m){
+  const t=tr(m), dt=det(m), disc=t*t-4*dt;
+  if(disc < -1e-12) return {complex:true, disc, lams:[], dirs:[]};
+  const s=Math.sqrt(Math.max(0,disc));
+  const l1=(t+s)/2, l2=(t-s)/2;
+  return {complex:false, disc, lams:[l1,l2], dirs:[eigvec(m,l1), eigvec(m,l2)]};
+}
+function eigvec(m,lam){
+  const a=m.a-lam, b=m.b, c=m.c, d=m.d-lam;
+  let w;
+  if(Math.hypot(a,b) > Math.hypot(c,d)) w=[-b,a]; else w=[-d,c];
+  let n=Math.hypot(w[0],w[1]);
+  if(n<1e-9){ w=[1,0]; n=1; }              // 标量阵：任意方向
+  return [w[0]/n, w[1]/n];
+}
+// 2x2 奇异值（A^T A 的特征值开方）
+function singvals(m){
+  const a=m.a,b=m.b,c=m.c,d=m.d;
+  const p=a*a+c*c, q=a*b+c*d, s=b*b+d*d;
+  const trr=p+s, dtt=p*s-q*q;
+  const disc=Math.sqrt(Math.max(0, trr*trr/4 - dtt));
+  const l1=trr/2+disc, l2=trr/2-disc;
+  return [Math.sqrt(Math.max(0,l1)), Math.sqrt(Math.max(0,l2))];
+}
+
+// ---------- 画布坐标 ----------
+// 单矩阵：整张画布；复合：分左右两个子视口。下面用「视口」参数化。
+function vp(ox, vw){ return {cx: ox + vw/2, cy: H/2, sc: scale}; }
+
+function sx(v,x){ return v.cx + x*v.sc; }
+function sy(v,y){ return v.cy - y*v.sc; }
+function wxv(v,px){ return (px-v.cx)/v.sc; }
+function wyv(v,py){ return (v.cy-py)/v.sc; }
+
+function gridLine(v,x0,y0,x1,y1,col,wd,dash){
+  ctx.save(); ctx.beginPath(); ctx.setLineDash(dash||[]);
+  ctx.moveTo(sx(v,x0),sy(v,y0)); ctx.lineTo(sx(v,x1),sy(v,y1));
+  ctx.strokeStyle=col; ctx.lineWidth=wd; ctx.stroke(); ctx.restore();
+}
+function arrow(v,x,y,col,label,handle){
+  const X=sx(v,x),Y=sy(v,y),X0=sx(v,0),Y0=sy(v,0);
+  ctx.beginPath(); ctx.moveTo(X0,Y0); ctx.lineTo(X,Y);
+  ctx.strokeStyle=col; ctx.lineWidth=3.4; ctx.stroke();
+  const ang=Math.atan2(Y-Y0,X-X0), hl=11;
+  ctx.beginPath(); ctx.moveTo(X,Y);
+  ctx.lineTo(X-hl*Math.cos(ang-0.4),Y-hl*Math.sin(ang-0.4));
+  ctx.lineTo(X-hl*Math.cos(ang+0.4),Y-hl*Math.sin(ang+0.4));
+  ctx.closePath(); ctx.fillStyle=col; ctx.fill();
+  if(handle){ ctx.beginPath(); ctx.arc(X,Y,6,0,7); ctx.fillStyle=col; ctx.fill(); }
+  if(label){ ctx.fillStyle=col; ctx.font='600 13px system-ui'; ctx.fillText(label, X+9, Y-7); }
+}
+
+// 在视口 v 上画一套坐标系（原始网格 + 轴）
+function drawBackdrop(v, N, ghost){
+  if(ghost){
+    for(let i=-N;i<=N;i++){
+      gridLine(v,i,-N,i,N,'rgba(120,130,160,.10)',1);
+      gridLine(v,-N,i,N,i,'rgba(120,130,160,.10)',1);
+    }
+  }
+}
+function drawAxes(v,N){
+  gridLine(v,-N,0,N,0,'rgba(200,210,235,.18)',1);
+  gridLine(v,0,-N,0,N,'rgba(200,210,235,.18)',1);
+}
+// 变换后网格
+function drawTGrid(v,m,N){
+  for(let i=-N;i<=N;i++){
+    const c=(i===0)?'rgba(123,216,143,.55)':'rgba(34,199,214,.22)';
+    const w=(i===0)?2:1;
+    let p0=apply(m,i,-N), p1=apply(m,i,N);
+    gridLine(v,p0[0],p0[1],p1[0],p1[1], (i===0?'rgba(245,166,35,.6)':'rgba(34,199,214,.22)'), w);
+    let q0=apply(m,-N,i), q1=apply(m,N,i);
+    gridLine(v,q0[0],q0[1],q1[0],q1[1], c, w);
+  }
+}
+// 变换后的单位正方形（含 det 配色）
+function drawSquare(v,m){
+  const pts=[[0,0],[1,0],[1,1],[0,1]].map(p=>apply(m,p[0],p[1]));
+  ctx.beginPath(); ctx.moveTo(sx(v,pts[0][0]),sy(v,pts[0][1]));
+  for(let k=1;k<4;k++) ctx.lineTo(sx(v,pts[k][0]),sy(v,pts[k][1]));
+  ctx.closePath();
+  const d=det(m);
+  ctx.fillStyle = d<-1e-6 ? 'rgba(239,107,115,.20)' : (Math.abs(d)<1e-6?'rgba(245,166,35,.22)':'rgba(123,216,143,.16)');
+  ctx.fill();
+  ctx.strokeStyle = d<-1e-6 ? 'rgba(239,107,115,.75)' : 'rgba(245,166,35,.78)';
+  ctx.lineWidth=1.6; ctx.stroke();
+}
+// 单位圆 → 椭圆
+function drawCircle(v,m){
+  ctx.beginPath();
+  for(let t=0;t<=64;t++){
+    const a=t/64*2*Math.PI, p=apply(m,Math.cos(a),Math.sin(a));
+    const X=sx(v,p[0]),Y=sy(v,p[1]);
+    if(t===0) ctx.moveTo(X,Y); else ctx.lineTo(X,Y);
+  }
+  ctx.closePath(); ctx.strokeStyle='rgba(255,209,102,.85)'; ctx.lineWidth=2; ctx.stroke();
+}
+// 蛋白点云：原像（灰）+ 像（彩）。col 给像的颜色；showPre 是否画灰原像
+function drawCloud(v,m,col,showPre){
+  // 原像（半透明灰）
+  if(showPre){
+    ctx.fillStyle='rgba(154,160,180,.35)';
+    for(const p of CLOUD.blob){
+      ctx.beginPath(); ctx.arc(sx(v,p[0]),sy(v,p[1]),2.1,0,7); ctx.fill();
+    }
+    // 原像链
+    ctx.strokeStyle='rgba(154,160,180,.5)'; ctx.lineWidth=1.4;
+    ctx.beginPath();
+    CLOUD.chain.forEach((p,i)=>{ const X=sx(v,p[0]),Y=sy(v,p[1]); i?ctx.lineTo(X,Y):ctx.moveTo(X,Y); });
+    ctx.stroke();
+  }
+  // 像（彩色）
+  ctx.fillStyle=col;
+  for(const p of CLOUD.blob){
+    const q=apply(m,p[0],p[1]);
+    ctx.beginPath(); ctx.arc(sx(v,q[0]),sy(v,q[1]),2.3,0,7); ctx.fill();
+  }
+  // 像链：带方向，端点用空心标记起点，便于看手性翻转
+  ctx.strokeStyle=col; ctx.lineWidth=1.8;
+  ctx.beginPath();
+  CLOUD.chain.forEach((p,i)=>{ const q=apply(m,p[0],p[1]); const X=sx(v,q[0]),Y=sy(v,q[1]); i?ctx.lineTo(X,Y):ctx.moveTo(X,Y); });
+  ctx.stroke();
+  // 链起点标记
+  const s0=apply(m,CLOUD.chain[0][0],CLOUD.chain[0][1]);
+  ctx.beginPath(); ctx.arc(sx(v,s0[0]),sy(v,s0[1]),4,0,7);
+  ctx.fillStyle=col; ctx.fill();
+  ctx.strokeStyle='#0f1117'; ctx.lineWidth=1.4; ctx.stroke();
+}
+// 特征方向（过原点的整条直线）+ λ 标注
+function drawEig(v,m,N){
+  const e=eig(m);
+  if(e.complex) return;
+  const cols=['#ffd166','#b388ff'];
+  e.dirs.forEach((w,i)=>{
+    gridLine(v,-N*w[0],-N*w[1], N*w[0], N*w[1], cols[i], 2, [7,5]);
+    // λ 标在正向端
+    const lx=2.4*w[0], ly=2.4*w[1];
+    ctx.fillStyle=cols[i]; ctx.font='600 12px system-ui';
+    ctx.fillText('λ'+(i+1)+'='+fmt(e.lams[i]), sx(v,lx)+4, sy(v,ly)-4);
+  });
+}
+
+// ---------- 主绘制 ----------
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  if(mode==='single'){
+    const v=vp(0,W); const N=6;
+    drawBackdrop(v,N,tGhost.checked);
+    if(tGrid.checked) drawTGrid(v,M,N);
+    if(tCloud.checked) drawCloud(v,M,'#22c7d6',true);
+    if(tSquare.checked) drawSquare(v,M);
+    if(tCircle.checked) drawCircle(v,M);
+    if(tEig.checked) drawEig(v,M,N);
+    drawAxes(v,N);
+    if(tBasis.checked){
+      arrow(v,M.a,M.c,'#f5a623','col1=Ae₁',true);
+      arrow(v,M.b,M.d,'#22c7d6','col2=Ae₂',true);
+    }
+  } else {
+    // 复合：左右两子视口
+    const halfW=W/2;
+    const vL=vp(0,halfW), vR=vp(halfW,halfW);
+    const N=5;
+    // 分隔线
+    gridLine(vp(0,W),0,-N,0,N,'rgba(0,0,0,0)',0); // noop 保持函数引用
+    ctx.save(); ctx.strokeStyle='rgba(120,130,160,.25)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(halfW,0); ctx.lineTo(halfW,H); ctx.stroke(); ctx.restore();
+    const AB=mul(A,B), BA=mul(B,A);
+    // 左：AB（青）
+    drawBackdrop(vL,N,true); drawTGrid(vL,AB,N);
+    drawCloud(vL,AB,'#22c7d6',true); drawSquare(vL,AB); drawAxes(vL,N);
+    // 右：BA（橙）
+    drawBackdrop(vR,N,true); drawTGrid(vR,BA,N);
+    drawCloud(vR,BA,'#f5a623',true); drawSquare(vR,BA); drawAxes(vR,N);
+    // 标题
+    ctx.font='600 14px system-ui'; ctx.textAlign='center';
+    ctx.fillStyle='#22c7d6'; ctx.fillText('AB（先 B 后 A）', halfW/2, 26);
+    ctx.fillStyle='#f5a623'; ctx.fillText('BA（先 A 后 B）', halfW+halfW/2, 26);
+    ctx.textAlign='left';
+  }
+}
+
+// ---------- 读数 ----------
+function fmt(x){ return (Math.abs(x)<1e-9?0:x).toFixed(2); }
+
+function updateSingle(){
+  cA.textContent=fmt(M.a); cC.textContent=fmt(M.c);
+  cB.textContent=fmt(M.b); cD.textContent=fmt(M.d);
+  vA.textContent=fmt(M.a); vB.textContent=fmt(M.b); vC.textContent=fmt(M.c); vD.textContent=fmt(M.d);
+  const d=det(M); oDet.textContent=fmt(d); oADet.textContent=fmt(Math.abs(d));
+  let ori;
+  if(Math.abs(d)<1e-6) ori='压扁（det=0，丢手性）';
+  else if(d>0) ori='保持（det>0，同手性）';
+  else ori='翻转 / 镜像（det<0，手性翻）';
+  oOri.textContent=ori;
+  oInv.textContent = Math.abs(d)<1e-6 ? '不可逆（奇异）' : '可逆';
+  oRank.textContent=rank(M);
+  const e=eig(M);
+  if(e.complex){
+    const re=tr(M)/2, im=Math.sqrt(-e.disc)/2;
+    oLam.textContent=fmt(re)+' ± '+fmt(im)+'i（复）';
+  } else {
+    oLam.textContent=fmt(e.lams[0])+', '+fmt(e.lams[1]);
+  }
+  const sv=singvals(M); oSig.textContent=fmt(sv[0])+', '+fmt(sv[1]);
+  const cond = sv[1]>1e-9 ? sv[0]/sv[1] : Infinity;
+  oCond.textContent = isFinite(cond)? cond.toFixed(2) : '∞';
+  let v='';
+  if(Math.abs(d)<1e-6){
+    v='<span class="r">奇异 / 不可逆</span>：把平面压到 '+rank(M)+' 维子空间，点云被拍扁、信息丢失，无法 undo（§3.6）。';
+  } else if(cond>30){
+    v='<span class="r">接近奇异 / 病态</span>：κ='+cond.toFixed(1)+' 很大，求逆放大误差——判奇异看条件数而非 det（§3.6.2）。';
+  } else if(Math.abs(Math.abs(d)-1)<1e-3 && Math.abs(sv[0]-1)<1e-3 && Math.abs(sv[1]-1)<1e-3){
+    v=(d<0?'<span class="r">正交·含反射</span>：保长保角但翻手性（反射，§3.2.4 / §3.4.4）。'
+          :'<span class="g">正交 / 刚性旋转</span>：σ₁=σ₂=1、保长保角（§3.4.4）——折叠叠合用的就是它。');
+  } else if(d<0){
+    v='<span class="r">含反射</span>：定向翻转（右手系→左手系=手性翻转，结构叠合须排除，§3.2.4）。';
+  } else {
+    v='<span class="g">可逆</span>：有向面积×'+d.toFixed(2)+'，σ₁/σ₂='+cond.toFixed(2)+'。'
+      + (e.complex?' 特征值为复数 ⇒ 含旋转成分，无实不变方向。':' 黄/紫虚线 = 实特征方向（不变方向）。');
+  }
+  oVerdict.innerHTML=v;
+}
+
+function updateCompose(){
+  wA.textContent=fmt(A.a); wB.textContent=fmt(A.b); wC.textContent=fmt(A.c); wD.textContent=fmt(A.d);
+  xA.textContent=fmt(B.a); xB.textContent=fmt(B.b); xC.textContent=fmt(B.c); xD.textContent=fmt(B.d);
+  const AB=mul(A,B), BA=mul(B,A);
+  abA.textContent=fmt(AB.a); abB.textContent=fmt(AB.b); abC.textContent=fmt(AB.c); abD.textContent=fmt(AB.d);
+  baA.textContent=fmt(BA.a); baB.textContent=fmt(BA.b); baC.textContent=fmt(BA.c); baD.textContent=fmt(BA.d);
+  const diff=Math.hypot(AB.a-BA.a, AB.b-BA.b, AB.c-BA.c, AB.d-BA.d);
+  oCommN.textContent=diff.toFixed(3);
+  if(diff<1e-6){
+    oComm.textContent='是，AB=BA';
+    oCommV.innerHTML='<span class="g">这对 A、B 恰好可交换</span>——两画布完全重合。可交换是例外（共特征基 / 同时对角化，第 6 章）。';
+  } else {
+    oComm.textContent='否，AB≠BA';
+    oCommV.innerHTML='<span class="r">AB ≠ BA</span>：先做谁，结果不同。左右画布点云落点明显错开——顺序不可换（§3.3.3）。注意 det(AB)=det(BA)='+fmt(det(A)*det(B))+'，面积倍数相同但形状不同。';
+  }
+}
+
+function update(){
+  if(mode==='single') updateSingle(); else updateCompose();
+  draw();
+}
+
+// ---------- 图例 / 提示随模式切换 ----------
+function refreshChrome(){
+  if(mode==='single'){
+    legendEl.innerHTML =
+      '<div><span class="ln" style="border-color:var(--orange)"></span>第 1 列 = <b style="color:var(--orange)">e₁=(1,0)</b> 的去向</div>'+
+      '<div><span class="ln" style="border-color:var(--cyan)"></span>第 2 列 = <b style="color:var(--cyan)">e₂=(0,1)</b> 的去向</div>'+
+      '<div><span class="bar" style="background:rgba(245,166,35,.25);border:1px solid var(--orange)"></span>单位正方形的像（面积=|det|）</div>'+
+      '<div><span class="ln" style="border-color:var(--yellow)"></span>单位圆 → 椭圆（半轴=σ）</div>'+
+      '<div><span class="dot" style="background:rgba(154,160,180,.6)"></span>蛋白点云·原像 &nbsp;<span class="dot" style="background:var(--cyan)"></span>像</div>'+
+      '<div><span class="dn" style="border-color:var(--yellow)"></span>特征方向（不变方向，若实）</div>';
+    hintEl.innerHTML='动手提示（§3.2 / §3.3）：直接<b>拖橙 / 青箭头头部</b>摆放两列；正方形<b>染红</b>=det&lt;0（手性翻转）；把 d 拉到 0 看点云被压成一条线（奇异）；点「旋转 60°」看特征方向消失（复特征值）。';
+  } else {
+    legendEl.innerHTML =
+      '<div><span class="dot" style="background:var(--cyan)"></span><b style="color:var(--cyan)">AB</b>：先 B 后 A（左）</div>'+
+      '<div><span class="dot" style="background:var(--orange)"></span><b style="color:var(--orange)">BA</b>：先 A 后 B（右）</div>'+
+      '<div><span class="dot" style="background:rgba(154,160,180,.6)"></span>灰 = 原始点云（原像）</div>';
+    hintEl.innerHTML='动手提示（§3.3.3）：调右侧 A、B 滑块，对照<b>左右两团点云</b>——只要 AB≠BA，落点就不同。点「可交换」预设让两边重合。';
+  }
+}
+
+// ---------- 事件：单矩阵 ----------
+function setSliders(){ sA.value=M.a; sB.value=M.b; sC.value=M.c; sD.value=M.d; }
+function clamp(x){ return Math.max(-3,Math.min(3,x)); }
+sA.oninput=e=>{M.a=+e.target.value;update();};
+sB.oninput=e=>{M.b=+e.target.value;update();};
+sC.oninput=e=>{M.c=+e.target.value;update();};
+sD.oninput=e=>{M.d=+e.target.value;update();};
+sRot.oninput=e=>{
+  const th=+e.target.value*Math.PI/180;
+  M.a=Math.cos(th); M.c=Math.sin(th); M.b=-Math.sin(th); M.d=Math.cos(th);
+  setSliders(); vRot.textContent=e.target.value+'°'; update();
+};
+[tGrid,tSquare,tCircle,tBasis,tGhost,tCloud,tEig].forEach(t=>t.onchange=draw);
+
+document.querySelectorAll('#paneSingle .presets button').forEach(btn=>{
+  btn.onclick=()=>{
+    const m=btn.dataset.m;
+    if(m==='rot60'){
+      const th=Math.PI/3; M={a:Math.cos(th),c:Math.sin(th),b:-Math.sin(th),d:Math.cos(th)};
+      sRot.value=60; vRot.textContent='60°';
+    } else {
+      const p=m.split(',').map(Number); // a,b,c,d row-major
+      M={a:p[0],b:p[1],c:p[2],d:p[3]};
+      sRot.value=0; vRot.textContent='0°';
+    }
+    setSliders(); update();
+  };
+});
+
+// 拖箭头头部（仅单矩阵模式）
+let drag=null;
+function near(v,px,py,wx_,wy_){ return Math.hypot(px-sx(v,wx_),py-sy(v,wy_))<14; }
+cv.addEventListener('pointerdown',e=>{
+  if(mode!=='single') return;
+  const r=cv.getBoundingClientRect(), px=e.clientX-r.left, py=e.clientY-r.top;
+  const v=vp(0,W);
+  if(near(v,px,py,M.a,M.c)) drag='col1';
+  else if(near(v,px,py,M.b,M.d)) drag='col2';
+  if(drag) cv.setPointerCapture(e.pointerId);
+});
+cv.addEventListener('pointermove',e=>{
+  if(!drag) return;
+  const r=cv.getBoundingClientRect(), px=e.clientX-r.left, py=e.clientY-r.top;
+  const v=vp(0,W);
+  let X=clamp(Math.round(wxv(v,px)*20)/20), Y=clamp(Math.round(wyv(v,py)*20)/20);
+  if(drag==='col1'){M.a=X;M.c=Y;} else {M.b=X;M.d=Y;}
+  setSliders(); update();
+});
+cv.addEventListener('pointerup',()=>{drag=null;});
+cv.addEventListener('pointerleave',()=>{drag=null;});
+
+// ---------- 事件：复合 ----------
+function setComposeSliders(){
+  qA.value=A.a; qB.value=A.b; qC.value=A.c; qD.value=A.d;
+  rA.value=B.a; rB.value=B.b; rC.value=B.c; rD.value=B.d;
+}
+qA.oninput=e=>{A.a=+e.target.value;update();};
+qB.oninput=e=>{A.b=+e.target.value;update();};
+qC.oninput=e=>{A.c=+e.target.value;update();};
+qD.oninput=e=>{A.d=+e.target.value;update();};
+rA.oninput=e=>{B.a=+e.target.value;update();};
+rB.oninput=e=>{B.b=+e.target.value;update();};
+rC.oninput=e=>{B.c=+e.target.value;update();};
+rD.oninput=e=>{B.d=+e.target.value;update();};
+document.querySelectorAll('#paneCompose .presets button').forEach(btn=>{
+  btn.onclick=()=>{
+    const c=btn.dataset.c;
+    if(c==='rotshear'){ A={a:0,b:-1,c:1,d:0}; B={a:1,b:1,c:0,d:1}; }
+    else if(c==='scaleshear'){ A={a:2,b:0,c:0,d:0.5}; B={a:1,b:1,c:0,d:1}; }
+    else if(c==='refrot'){ A={a:1,b:0,c:0,d:-1}; const th=Math.PI/4; B={a:Math.cos(th),b:-Math.sin(th),c:Math.sin(th),d:Math.cos(th)}; }
+    else if(c==='commute'){ A={a:2,b:0,c:0,d:0.5}; B={a:3,b:0,c:0,d:0.7}; }
+    setComposeSliders(); update();
+  };
+});
+
+// ---------- 模式切换 ----------
+const paneSingle=document.getElementById('paneSingle');
+const paneCompose=document.getElementById('paneCompose');
+const mbSingle=document.getElementById('mbSingle');
+const mbCompose=document.getElementById('mbCompose');
+function setMode(m){
+  mode=m;
+  mbSingle.classList.toggle('active', m==='single');
+  mbCompose.classList.toggle('active', m==='compose');
+  paneSingle.classList.toggle('hidden', m!=='single');
+  paneCompose.classList.toggle('hidden', m!=='compose');
+  refreshChrome();
+  update();
+}
+mbSingle.onclick=()=>setMode('single');
+mbCompose.onclick=()=>setMode('compose');
+
+// 初始化
+setComposeSliders();
+refreshChrome();
+resize();
+update();
+</script>
+</body>
+</html>

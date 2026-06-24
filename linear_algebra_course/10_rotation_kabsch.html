@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>三维旋转 + Kabsch 结构叠合 · 旋转一团蛋白点云 · 两个结构对齐 —— 配套第 10 章</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a24; --panel2:#1f2330; --line:#2b3040;
+    --text:#e7e9f0; --dim:#9aa0b4;
+    --orange:#f5a623;  /* 结构 A / x 轴 */
+    --cyan:#22c7d6;    /* 结构 B / y 轴 */
+    --yellow:#ffd166;  /* z 轴 / 强调 */
+    --red:#ef6b73;     /* 警示 / 叠合前 */
+    --green:#7bd88f;   /* 命中 / 叠合后 */
+    --violet:#b388ff;  /* 旋转轴 */
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;}
+  header{padding:13px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{margin:0;font-size:18px;letter-spacing:.3px}
+  header h1 .c{color:var(--cyan)} header h1 .o{color:var(--orange)}
+  header p{margin:5px 0 0;color:var(--dim);font-size:13px;line-height:1.65}
+  header p b{color:#fff}
+  .tabs{display:flex;gap:8px;padding:10px 20px 0;background:var(--panel);border-bottom:1px solid var(--line)}
+  .tabs button{background:#20242f;color:var(--dim);border:1px solid var(--line);border-bottom:none;
+    border-radius:9px 9px 0 0;padding:9px 15px;font-size:13.5px;cursor:pointer;font-weight:600}
+  .tabs button.active{background:var(--bg);color:#fff;border-color:var(--line)}
+  .tabs button:hover{filter:brightness(1.15)}
+  .wrap{display:flex;height:calc(100% - 74px - 46px);min-height:0}
+  .stage{position:relative;flex:1 1 auto;min-width:0;overflow:hidden;
+    background:radial-gradient(circle at 48% 46%,#161a26 0%,#0d0f15 84%)}
+  canvas{display:block;width:100%;height:100%}
+  #cv1,#cv2{cursor:grab}
+  .legend{position:absolute;left:14px;top:12px;font-size:12.5px;pointer-events:none;
+    background:rgba(15,17,23,.62);padding:8px 11px;border-radius:8px;border:1px solid var(--line);line-height:1.95}
+  .legend .ln{display:inline-block;width:18px;height:0;border-top:3px solid;margin-right:6px;vertical-align:middle}
+  .legend .dt{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .hint{position:absolute;left:14px;bottom:12px;color:var(--dim);font-size:12px;pointer-events:none;
+    background:rgba(15,17,23,.55);padding:6px 10px;border-radius:8px;border:1px solid var(--line);max-width:640px;line-height:1.6}
+  .panel{flex:0 0 430px;max-width:55%;overflow-y:auto;border-left:1px solid var(--line);background:var(--panel);padding:16px}
+  .panel h2{font-size:14px;margin:18px 0 8px;color:#fff}
+  .panel h2:first-child{margin-top:0}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+  button.b{background:#262b3a;color:var(--text);border:1px solid var(--line);border-radius:8px;
+    padding:7px 11px;font-size:13px;cursor:pointer}
+  button.b:hover{filter:brightness(1.13)}
+  button.b.go{background:#1f3a2c;border-color:#2f6b48}
+  .row{display:flex;align-items:center;gap:10px;margin:9px 0}
+  .row label{flex:0 0 78px;font-weight:600;font-size:13px}
+  input[type=range]{flex:1 1 auto;accent-color:var(--cyan)}
+  .val{flex:0 0 60px;text-align:right;font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px}
+  .stat{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px dashed #2b3040}
+  .stat:last-child{border-bottom:none}
+  .stat span:last-child{color:#fff;font-variant-numeric:tabular-nums}
+  .note{font-size:12.5px;color:var(--dim);line-height:1.85}
+  .note b{color:#e7e9f0}
+  .note .o{color:var(--orange)} .note .c{color:var(--cyan)} .note .y{color:var(--yellow)}
+  .note .v{color:var(--violet)} .note .r{color:var(--red)} .note .g{color:var(--green)}
+  code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#cdd6f4}
+  .presets{display:flex;flex-wrap:wrap;gap:6px}
+  .presets button{flex:1 1 30%;font-size:12px;padding:6px 4px}
+  .mat{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:6px 0;font-variant-numeric:tabular-nums}
+  .mat .cell{text-align:center;font-size:13px;padding:5px 2px;background:#13161f;border:1px solid var(--line);border-radius:6px}
+  .matwrap{display:flex;align-items:stretch;gap:6px}
+  .matwrap .brk{font-size:64px;color:var(--dim);font-weight:200;line-height:1;display:flex;align-items:center}
+  .chk{display:flex;align-items:center;gap:8px;font-size:13px;margin:8px 0}
+  .chk input{transform:scale(1.25)}
+  .view{display:none;height:100%}
+  .view.active{display:flex}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="o">三维旋转</span> + <span class="c">Kabsch</span> 结构叠合 · 转动一团蛋白点云 · 把两个结构对齐</h1>
+  <p>配套《线性代数深度入门》<b>第 10 章「旋转、刚体变换 SE(3) 与等变性」</b>。两个标签页对应正文的两处「亲手玩」：<b>① §10.1</b> 用三轴角（或四元数）实时转动一小段蛋白骨架，观察<b>旋转保持任意两点距离不变</b>（旋转 = 正交 + det=+1）；<b>② §10.6</b> 给两套点云（B = A 加噪 + 随机刚体变换），点「叠合」用 <b>Kabsch</b>（中心化 → H → 3×3 对称特征分解求 SVD → R，含反射修正）把 B 对齐到 A，看 <b>RMSD 应声下降</b>。一句话连到折叠：AlphaFold 给每个残基一个 frame（一个 SE(3) 元素），靠这种「等变」结构把物理对称性写进网络。</p>
+</header>
+<div class="tabs">
+  <button id="tab1" class="active" onclick="showTab(1)">① 旋转点云（SO(3) 不变量）</button>
+  <button id="tab2" onclick="showTab(2)">② Kabsch 结构叠合</button>
+</div>
+
+<!-- ============ VIEW 1: rotate point cloud ============ -->
+<div id="view1" class="view active wrap">
+  <div class="stage">
+    <canvas id="cv1"></canvas>
+    <div class="legend">
+      <div><span class="dt" style="background:var(--orange)"></span>蛋白骨架点云（Cα 串珠）</div>
+      <div><span class="ln" style="border-color:var(--red)"></span><b style="color:var(--red)">测距高亮的两点</b>（点击换一对）</div>
+      <div><span class="ln" style="border-color:var(--violet)"></span><b style="color:var(--violet)">等效旋转轴</b> n̂（欧拉旋转定理）</div>
+      <div style="margin-top:4px;color:var(--dim)">细轴：<span style="color:var(--orange)">x</span> / <span style="color:var(--cyan)">y</span> / <span style="color:var(--yellow)">z</span></div>
+    </div>
+    <div class="hint">在画布上<b>拖动可自由转视角</b>（仅改观察方向，不改物体）；右侧三个滑杆绕 <b>x/y/z</b> 轴旋转<b>物体本身</b>。注意右侧「点间距」读数：无论怎么转，<span class="r">两红点的距离恒定</span> —— 这就是 §10.1「旋转保距（isometry）」的不变量。</div>
+  </div>
+  <div class="panel">
+    <h2>绕轴旋转物体（°）</h2>
+    <div class="card">
+      <div class="row"><label style="color:var(--orange)">绕 x 轴</label><input id="rx" type="range" min="-180" max="180" step="1" value="25"><div class="val" id="vrx">25°</div></div>
+      <div class="row"><label style="color:var(--cyan)">绕 y 轴</label><input id="ry" type="range" min="-180" max="180" step="1" value="-35"><div class="val" id="vry">-35°</div></div>
+      <div class="row"><label style="color:var(--yellow)">绕 z 轴</label><input id="rz" type="range" min="-180" max="180" step="1" value="0"><div class="val" id="vrz">0°</div></div>
+      <div class="presets">
+        <button class="b" onclick="resetRot()">归零</button>
+        <button class="b" onclick="spinToggle()" id="spinBtn">▶ 自动旋转</button>
+        <button class="b" onclick="pickPair()">↻ 换测距点对</button>
+      </div>
+    </div>
+    <h2>旋转矩阵 R = Rz·Ry·Rx</h2>
+    <div class="card">
+      <div class="matwrap">
+        <div class="brk">[</div>
+        <div class="mat" id="matR" style="flex:1">
+          <div class="cell">1</div><div class="cell">0</div><div class="cell">0</div>
+          <div class="cell">0</div><div class="cell">1</div><div class="cell">0</div>
+          <div class="cell">0</div><div class="cell">0</div><div class="cell">1</div>
+        </div>
+        <div class="brk">]</div>
+      </div>
+      <div class="stat" style="margin-top:8px"><span>det R（应 = +1，保手性）</span><span id="detR">1.000</span></div>
+      <div class="stat"><span>‖列向量‖（应 = 1，正交归一）</span><span id="colN">1.000</span></div>
+      <div class="stat"><span>等效转角 θ = arccos((trR−1)/2)</span><span id="theta">0.0°</span></div>
+      <div class="stat"><span>等效旋转轴 n̂</span><span id="axis">—</span></div>
+    </div>
+    <h2>不变量：旋转保距</h2>
+    <div class="card">
+      <div class="stat"><span>两红点距离 ‖pᵢ−pⱼ‖（旋转前）</span><span id="d0">—</span></div>
+      <div class="stat"><span>两红点距离（旋转后）</span><span id="d1">—</span></div>
+      <div class="stat"><span>回转半径 Rg（全点云，旋转不变）</span><span id="rg">—</span></div>
+    </div>
+    <div class="card note">
+      <b>正文呼应（§10.1）</b>：旋转矩阵 R 满足 <code>RᵀR=I</code>（<span class="g">列两两正交、模长 1</span>）且 <code>det R=+1</code>（<span class="r">不翻手性</span>）。这两条精确刻画 <code>SO(3)</code>。由「保内积」立刻得「保距」：<code>‖Rx−Ry‖=‖x−y‖</code> —— 所以上面两红点的距离、整团点云的回转半径 <span class="y">Rg</span>，旋转怎么转都不变。<b>欧拉旋转定理</b>：任意 R 都等于<span class="v">绕某一固定轴 n̂ 转 θ</span>（n̂ = 特征值 1 的特征向量，<code>trR=1+2cosθ</code>）。<b>动手提示（§10.1.3）</b>：把 z 设 0、只调 x 与 y，看 <span class="v">n̂</span> 怎么从纯 x 轴连续偏到斜方向 —— 这正是「三维旋转只有 3 个自由度、但合成轴不直观」的由来。
+    </div>
+  </div>
+</div>
+
+<!-- ============ VIEW 2: Kabsch superposition ============ -->
+<div id="view2" class="view wrap">
+  <div class="stage">
+    <canvas id="cv2"></canvas>
+    <div class="legend">
+      <div><span class="dt" style="background:var(--orange)"></span><b style="color:var(--orange)">结构 A</b>（参考 / 真实）</div>
+      <div><span class="dt" style="background:var(--cyan)"></span><b style="color:var(--cyan)">结构 B</b>（加噪 + 随机刚体变换）</div>
+      <div><span class="ln" style="border-color:#5a607a"></span>残差连线（对应点之间）</div>
+    </div>
+    <div class="hint">B 是 A <b>加高斯噪声 + 随机旋转平移</b>后的「同一蛋白的另一个摆位」。拖动可转视角。点 <b>「▶ 叠合 (Kabsch)」</b>：中心化两者 → 算交叉协方差 H → 对 H 做 SVD（这里用 3×3 对称特征分解实现）→ 取 <code>R=V diag(1,1,d) Uᵀ</code>（d 修反射）→ 把 B 旋上去，看 <span class="g">RMSD 骤降</span>到只剩噪声水平。</div>
+  </div>
+  <div class="panel">
+    <h2>生成两套点云</h2>
+    <div class="card">
+      <div class="row"><label>骨架点数</label><input id="npt" type="range" min="6" max="40" step="1" value="16"><div class="val" id="vnpt">16</div></div>
+      <div class="row"><label>噪声 σ</label><input id="noise" type="range" min="0" max="0.6" step="0.01" value="0.12"><div class="val" id="vnoise">0.12</div></div>
+      <div class="presets">
+        <button class="b" onclick="regen2()">↻ 重新生成 A 与 B</button>
+        <button class="b" onclick="forceReflect()">注入反射(对照)</button>
+      </div>
+      <div class="chk"><input type="checkbox" id="fixReflect" checked><label for="fixReflect" style="font-weight:600;font-size:13px">Kabsch 反射修正（强制 det R=+1）</label></div>
+    </div>
+    <h2>叠合</h2>
+    <div class="card">
+      <div class="presets">
+        <button class="b go" style="flex:1 1 60%" onclick="runKabsch()">▶ 叠合 (Kabsch)</button>
+        <button class="b" style="flex:1 1 30%" onclick="resetB()">还原 B</button>
+      </div>
+      <div class="stat" style="margin-top:10px"><span>叠合前 RMSD</span><span id="rmsd0" style="color:var(--red)">—</span></div>
+      <div class="stat"><span>叠合后 RMSD</span><span id="rmsd1" style="color:var(--green)">—</span></div>
+      <div class="stat"><span>理论下限 ≈ 噪声 σ</span><span id="rmsdMin">—</span></div>
+      <div class="stat"><span>求得旋转角 θ</span><span id="kθ">—</span></div>
+      <div class="stat"><span>求得旋转轴 n̂</span><span id="kaxis">—</span></div>
+      <div class="stat"><span>det R（修正后应 = +1）</span><span id="kdet">—</span></div>
+    </div>
+    <h2>交叉协方差 H 与 R</h2>
+    <div class="card">
+      <div class="note" style="margin-bottom:4px">H = Bᵀ_c A_c（中心化后）</div>
+      <div class="matwrap">
+        <div class="brk">[</div>
+        <div class="mat" id="matH" style="flex:1"></div>
+        <div class="brk">]</div>
+      </div>
+      <div class="note" style="margin:8px 0 4px">R = V·diag(1,1,d)·Uᵀ（最优旋转）</div>
+      <div class="matwrap">
+        <div class="brk">[</div>
+        <div class="mat" id="matRk" style="flex:1"></div>
+        <div class="brk">]</div>
+      </div>
+    </div>
+    <div class="card note">
+      <b>正文呼应（§10.6）</b>：Kabsch / 正交 Procrustes 求的是「让 <code>Σ‖R·bᵢ+t−aᵢ‖²</code> 最小」的<span class="g">最优刚体变换</span>。最优平移 t 把两个质心对齐（所以先中心化）；最优旋转来自 <code>H=BᵀA</code> 的 SVD <code>H=UΣVᵀ</code>，取 <code>R=V diag(1,1,det(VUᵀ)) Uᵀ</code> —— 中间那个 <span class="r">d=det(VUᵀ)</span> 就是<b>反射修正</b>：若不修，可能得到 det=−1 的反常旋转，把蛋白手性翻转（L→D，物理错误，§10.1.1）。<b>动手提示</b>：点「注入反射」再关掉「反射修正」复选框，看 RMSD 反而降不下去 / 手性翻转 —— 这就是为什么 Kabsch 必须钉死 det=+1。<br><br><b>连到折叠</b>：评估预测结构常用 RMSD，但必须<b>先 Kabsch 叠合</b>，因为 RMSD 对整体旋转平移本应<span class="c">不变</span>（同一构象摆哪都一样）。AlphaFold 不靠「先预测坐标再叠合」，而是给每个残基一个 <b>frame（SE(3) 元素）</b>、在 frame 下做<b>等变</b>更新（IPA）——把「物理对旋转平移无所谓」这条对称性直接焊进网络结构。
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ===================================================================
+   纯 JS 线性代数：3D 向量、3x3 矩阵、3x3 对称矩阵 Jacobi 特征分解、
+   由特征分解搭出 3x3 SVD、Kabsch。全部不依赖任何外部库。
+   =================================================================== */
+
+/* ---------- 基础向量 / 矩阵工具 ---------- */
+function randn(){ // 标准正态（Box–Muller）
+  let u=0,v=0; while(u===0)u=Math.random(); while(v===0)v=Math.random();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+}
+function vsub(a,b){return [a[0]-b[0],a[1]-b[1],a[2]-b[2]];}
+function vlen(a){return Math.hypot(a[0],a[1],a[2]);}
+function matMulVec(M,v){ // 3x3 · 3
+  return [ M[0][0]*v[0]+M[0][1]*v[1]+M[0][2]*v[2],
+           M[1][0]*v[0]+M[1][1]*v[1]+M[1][2]*v[2],
+           M[2][0]*v[0]+M[2][1]*v[1]+M[2][2]*v[2] ];
+}
+function matMul(A,B){ // 3x3 · 3x3
+  const C=[[0,0,0],[0,0,0],[0,0,0]];
+  for(let i=0;i<3;i++)for(let j=0;j<3;j++){let s=0;for(let k=0;k<3;k++)s+=A[i][k]*B[k][j];C[i][j]=s;}
+  return C;
+}
+function matT(A){return [[A[0][0],A[1][0],A[2][0]],[A[0][1],A[1][1],A[2][1]],[A[0][2],A[1][2],A[2][2]]];}
+function det3(A){
+  return A[0][0]*(A[1][1]*A[2][2]-A[1][2]*A[2][1])
+       - A[0][1]*(A[1][0]*A[2][2]-A[1][2]*A[2][0])
+       + A[0][2]*(A[1][0]*A[2][1]-A[1][1]*A[2][0]);
+}
+/* 绕 x/y/z 轴的基本旋转矩阵（角度为弧度） */
+function Rx(a){const c=Math.cos(a),s=Math.sin(a);return [[1,0,0],[0,c,-s],[0,s,c]];}
+function Ry(a){const c=Math.cos(a),s=Math.sin(a);return [[c,0,s],[0,1,0],[-s,0,c]];}
+function Rz(a){const c=Math.cos(a),s=Math.sin(a);return [[c,-s,0],[s,c,0],[0,0,1]];}
+
+/* ---------- 3x3 对称矩阵 Jacobi 特征分解 ----------
+   输入对称 S，返回 {vals[3], vecs:3x3 列为特征向量}（按特征值降序）。
+   稳健：循环旋转法，几次扫描即收敛；退化情形不崩。 */
+function jacobiSym3(Sin){
+  const S=[Sin[0].slice(),Sin[1].slice(),Sin[2].slice()];
+  const V=[[1,0,0],[0,1,0],[0,0,1]];
+  for(let sweep=0;sweep<50;sweep++){
+    // 收敛判据：非对角平方和
+    const off=S[0][1]*S[0][1]+S[0][2]*S[0][2]+S[1][2]*S[1][2];
+    if(off<1e-20)break;
+    for(let p=0;p<3;p++)for(let q=p+1;q<3;q++){
+      const apq=S[p][q];
+      if(Math.abs(apq)<1e-18)continue;
+      const app=S[p][p],aqq=S[q][q];
+      const phi=0.5*Math.atan2(2*apq,aqq-app); // 旋转角
+      const c=Math.cos(phi),s=Math.sin(phi);
+      // 对 S 做 Givens 相似变换：S <- Jᵀ S J
+      for(let k=0;k<3;k++){
+        const skp=S[k][p],skq=S[k][q];
+        S[k][p]=c*skp-s*skq; S[k][q]=s*skp+c*skq;
+      }
+      for(let k=0;k<3;k++){
+        const spk=S[p][k],sqk=S[q][k];
+        S[p][k]=c*spk-s*sqk; S[q][k]=s*spk+c*sqk;
+      }
+      // 累积特征向量 V <- V J
+      for(let k=0;k<3;k++){
+        const vkp=V[k][p],vkq=V[k][q];
+        V[k][p]=c*vkp-s*vkq; V[k][q]=s*vkp+c*vkq;
+      }
+    }
+  }
+  let vals=[S[0][0],S[1][1],S[2][2]];
+  // 按特征值降序排列（同步重排 V 的列）
+  const idx=[0,1,2].sort((a,b)=>vals[b]-vals[a]);
+  const sv=idx.map(i=>vals[i]);
+  const Vc=[[0,0,0],[0,0,0],[0,0,0]];
+  for(let i=0;i<3;i++)for(let j=0;j<3;j++)Vc[i][j]=V[i][idx[j]];
+  return {vals:sv,vecs:Vc};
+}
+
+/* ---------- 3x3 SVD（经对称特征分解搭出）----------
+   H = U Σ Vᵀ。做法：V = eig(HᵀH) 的特征向量，σ=√特征值，
+   U 列 = H vᵢ / σᵢ；σ→0 时用正交补兜底，保证 U 正交。
+   返回 {U,S:[σ1,σ2,σ3],V}。 */
+function svd3(H){
+  const Ht=matT(H);
+  const HtH=matMul(Ht,H); // 对称半正定
+  const {vals,vecs:V}=jacobiSym3(HtH);
+  const sig=vals.map(v=>Math.sqrt(Math.max(0,v)));
+  // U 列 = H vᵢ / σᵢ
+  const Ucols=[[0,0,0],[0,0,0],[0,0,0]];
+  const cols=[];
+  for(let j=0;j<3;j++){
+    const vj=[V[0][j],V[1][j],V[2][j]];
+    const hv=matMulVec(H,vj);
+    if(sig[j]>1e-10){cols.push([hv[0]/sig[j],hv[1]/sig[j],hv[2]/sig[j]]);}
+    else{cols.push(null);} // 退化列，稍后用正交补填
+  }
+  // 处理退化列：用已有列做 Gram–Schmidt 正交补
+  for(let j=0;j<3;j++){
+    if(cols[j])continue;
+    // 找一个与现有列尽量正交的种子
+    let seed=[[1,0,0],[0,1,0],[0,0,1]];
+    let cand=null,best=-1;
+    for(const e of seed){
+      let g=e.slice();
+      for(let k=0;k<3;k++){if(!cols[k])continue;const d=g[0]*cols[k][0]+g[1]*cols[k][1]+g[2]*cols[k][2];g=[g[0]-d*cols[k][0],g[1]-d*cols[k][1],g[2]-d*cols[k][2]];}
+      const n=vlen(g); if(n>best){best=n;cand=n>1e-9?[g[0]/n,g[1]/n,g[2]/n]:[1,0,0];}
+    }
+    cols[j]=cand;
+  }
+  for(let i=0;i<3;i++)for(let j=0;j<3;j++)Ucols[i][j]=cols[j][i];
+  return {U:Ucols,S:sig,V};
+}
+
+/* ---------- Kabsch：求把 B 对齐到 A 的最优 R（已中心化）----------
+   返回 {R, H}。fixReflect=true 时强制 det R=+1（反射修正）。 */
+function kabsch(Ac,Bc,fixReflect){
+  // H = Bcᵀ Ac  (3x3 交叉协方差)
+  const H=[[0,0,0],[0,0,0],[0,0,0]];
+  for(let n=0;n<Ac.length;n++){
+    for(let i=0;i<3;i++)for(let j=0;j<3;j++)H[i][j]+=Bc[n][i]*Ac[n][j];
+  }
+  const {U,V}=svd3(H);
+  // d = det(V Uᵀ)；反射修正把最小奇异值方向翻号
+  const VUt=matMul(V,matT(U));
+  let d=det3(VUt);
+  d = d<0?-1:1;
+  if(!fixReflect)d=1; // 关掉修正：直接 R=V Uᵀ（可能含反射）
+  const D=[[1,0,0],[0,1,0],[0,0,d]];
+  const R=matMul(matMul(V,D),matT(U)); // R = V D Uᵀ
+  return {R,H};
+}
+
+/* ---------- 由旋转矩阵取轴角（欧拉旋转定理）---------- */
+function axisAngle(R){
+  const tr=R[0][0]+R[1][1]+R[2][2];
+  let cosT=(tr-1)/2; cosT=Math.max(-1,Math.min(1,cosT));
+  const theta=Math.acos(cosT);
+  let ax;
+  if(theta<1e-6){ax=[0,0,1];}
+  else if(Math.PI-theta<1e-4){
+    // θ≈π：从对角线取轴（反对称部分≈0）
+    const xx=(R[0][0]+1)/2,yy=(R[1][1]+1)/2,zz=(R[2][2]+1)/2;
+    ax=[Math.sqrt(Math.max(0,xx)),Math.sqrt(Math.max(0,yy)),Math.sqrt(Math.max(0,zz))];
+  } else {
+    const s=2*Math.sin(theta);
+    ax=[(R[2][1]-R[1][2])/s,(R[0][2]-R[2][0])/s,(R[1][0]-R[0][1])/s];
+  }
+  const n=vlen(ax); if(n>1e-9)ax=[ax[0]/n,ax[1]/n,ax[2]/n];
+  return {theta,axis:ax};
+}
+
+/* ===================================================================
+   生成一小段「蛋白骨架」点云：沿一条扭转曲线撒点（像一段螺旋骨架）
+   =================================================================== */
+function makeBackbone(n){
+  const pts=[];
+  for(let i=0;i<n;i++){
+    const t=i/(n-1);
+    // 一段带噪的螺旋 + 缓慢漂移，看起来像蛋白骨架的一小段
+    const ang=t*Math.PI*3.2;
+    const r=1.0+0.15*Math.sin(t*7);
+    const x=r*Math.cos(ang);
+    const y=r*Math.sin(ang);
+    const z=(t-0.5)*3.0 + 0.3*Math.sin(t*5);
+    pts.push([x,y,z]);
+  }
+  // 中心化到质心
+  return centerOn(pts).pts;
+}
+function centroid(pts){
+  let c=[0,0,0]; pts.forEach(p=>{c[0]+=p[0];c[1]+=p[1];c[2]+=p[2];});
+  const n=pts.length; return [c[0]/n,c[1]/n,c[2]/n];
+}
+function centerOn(pts){
+  const c=centroid(pts);
+  return {pts:pts.map(p=>[p[0]-c[0],p[1]-c[1],p[2]-c[2]]),c};
+}
+function gyration(pts){ // 回转半径 Rg = √(平均到质心距离平方)
+  const c=centroid(pts); let s=0;
+  pts.forEach(p=>{const d=vsub(p,c);s+=d[0]*d[0]+d[1]*d[1]+d[2]*d[2];});
+  return Math.sqrt(s/pts.length);
+}
+function rmsd(A,B){ // 两套对应点的 RMSD
+  let s=0; for(let i=0;i<A.length;i++){const d=vsub(A[i],B[i]);s+=d[0]*d[0]+d[1]*d[1]+d[2]*d[2];}
+  return Math.sqrt(s/A.length);
+}
+
+/* ===================================================================
+   3D → 2D 投影 + 画图（视角靠拖动控制，正交投影 + 轻微透视感）
+   =================================================================== */
+function fit(cv){const r=cv.getBoundingClientRect(),dpr=devicePixelRatio||1;cv.width=r.width*dpr;cv.height=r.height*dpr;return {w:r.width,h:r.height,dpr};}
+
+// 把视角（yaw,pitch）转成旋转矩阵，作用在物体上得到相机坐标
+function viewMat(yaw,pitch){ return matMul(Rx(pitch),Ry(yaw)); }
+
+// 投影：相机坐标 (X,Y,Z) -> 屏幕。轻微透视：近大远小
+function project(p,view,cx,cy,sc){
+  const q=matMulVec(view,p);
+  const persp=1/(1+ (q[2]+4)*0.0); // 这里保持正交（系数 0），稳定清晰
+  const f= 1.0/(1.0 - q[2]*0.06); // 轻透视：Z 越大（越近，朝屏幕外为 +）越大
+  return {x:cx+q[0]*sc*f, y:cy-q[1]*sc*f, z:q[2], f};
+}
+
+/* ================= VIEW 1：旋转点云 ================= */
+const cv1=document.getElementById('cv1'), x1=cv1.getContext('2d');
+let base1=makeBackbone(18);   // 原始（旋转前）点云，已中心化
+let view1={yaw:0.5,pitch:-0.35};
+let spin=false, spinT=0;
+let pairIdx=[2, 14];          // 当前测距的两点
+
+function getRotObj(){ // 物体自身旋转矩阵 R = Rz·Ry·Rx
+  const ax=(+document.getElementById('rx').value)*Math.PI/180;
+  const ay=(+document.getElementById('ry').value)*Math.PI/180;
+  const az=(+document.getElementById('rz').value)*Math.PI/180;
+  return matMul(matMul(Rz(az),Ry(ay)),Rx(ax));
+}
+function resetRot(){document.getElementById('rx').value=0;document.getElementById('ry').value=0;document.getElementById('rz').value=0;draw1();}
+function spinToggle(){spin=!spin;document.getElementById('spinBtn').textContent=spin?'⏸ 暂停旋转':'▶ 自动旋转';}
+function pickPair(){
+  const n=base1.length;
+  let a=Math.floor(Math.random()*n),b=Math.floor(Math.random()*n);
+  while(b===a)b=Math.floor(Math.random()*n);
+  pairIdx=[a,b]; draw1();
+}
+function setMat(elId,M){
+  const el=document.getElementById(elId); el.innerHTML='';
+  for(let i=0;i<3;i++)for(let j=0;j<3;j++){
+    const d=document.createElement('div'); d.className='cell';
+    const v=M[i][j]; d.textContent=(v>=0?' ':'')+v.toFixed(2);
+    el.appendChild(d);
+  }
+}
+function draw1(){
+  const R=getRotObj();
+  // 滑杆读数
+  document.getElementById('vrx').textContent=Math.round(+document.getElementById('rx').value)+'°';
+  document.getElementById('vry').textContent=Math.round(+document.getElementById('ry').value)+'°';
+  document.getElementById('vrz').textContent=Math.round(+document.getElementById('rz').value)+'°';
+  setMat('matR',R);
+  document.getElementById('detR').textContent=det3(R).toFixed(3);
+  const c0=[R[0][0],R[1][0],R[2][0]]; document.getElementById('colN').textContent=vlen(c0).toFixed(3);
+  const aa=axisAngle(R);
+  document.getElementById('theta').textContent=(aa.theta*180/Math.PI).toFixed(1)+'°';
+  document.getElementById('axis').textContent='('+aa.axis.map(v=>v.toFixed(2)).join(', ')+')';
+
+  // 旋转后的点云
+  const rot=base1.map(p=>matMulVec(R,p));
+  // 不变量读数
+  const d0=vlen(vsub(base1[pairIdx[0]],base1[pairIdx[1]]));
+  const d1=vlen(vsub(rot[pairIdx[0]],rot[pairIdx[1]]));
+  document.getElementById('d0').textContent=d0.toFixed(4);
+  document.getElementById('d1').textContent=d1.toFixed(4);
+  document.getElementById('rg').textContent=gyration(rot).toFixed(4);
+
+  // 画
+  const {w,h,dpr}=fit(cv1); x1.setTransform(dpr,0,0,dpr,0,0); x1.clearRect(0,0,w,h);
+  const cx=w/2,cy=h/2,sc=Math.min(w,h)/8;
+  const view=viewMat(view1.yaw,view1.pitch);
+  // 世界坐标轴（细）
+  const axes=[[[2.6,0,0],'#f5a623','x'],[[0,2.6,0],'#22c7d6','y'],[[0,0,2.6],'#ffd166','z']];
+  axes.forEach(([v,col,lab])=>{
+    const o=project([0,0,0],view,cx,cy,sc), e=project(v,view,cx,cy,sc);
+    x1.strokeStyle=col;x1.globalAlpha=0.5;x1.lineWidth=1.2;
+    x1.beginPath();x1.moveTo(o.x,o.y);x1.lineTo(e.x,e.y);x1.stroke();
+    x1.globalAlpha=1;x1.fillStyle=col;x1.font='12px system-ui';x1.fillText(lab,e.x+3,e.y);
+  });
+  // 等效旋转轴 n̂（紫，过原点的双向射线）
+  if(aa.theta>1e-3){
+    const p1=project([aa.axis[0]*2.2,aa.axis[1]*2.2,aa.axis[2]*2.2],view,cx,cy,sc);
+    const p2=project([-aa.axis[0]*2.2,-aa.axis[1]*2.2,-aa.axis[2]*2.2],view,cx,cy,sc);
+    x1.strokeStyle='#b388ff';x1.lineWidth=2;x1.setLineDash([6,4]);
+    x1.beginPath();x1.moveTo(p1.x,p1.y);x1.lineTo(p2.x,p2.y);x1.stroke();x1.setLineDash([]);
+    x1.fillStyle='#b388ff';x1.font='12px system-ui';x1.fillText('n̂',p1.x+4,p1.y);
+  }
+  // 投影点 + 深度排序
+  const proj=rot.map((p,i)=>({...project(p,view,cx,cy,sc),i}));
+  // 骨架连线（沿序号）
+  x1.strokeStyle='#7a5a2e';x1.lineWidth=2.5;x1.globalAlpha=0.85;
+  x1.beginPath();
+  for(let i=0;i<proj.length;i++){if(i===0)x1.moveTo(proj[i].x,proj[i].y);else x1.lineTo(proj[i].x,proj[i].y);}
+  x1.stroke();x1.globalAlpha=1;
+  // 测距连线（红）
+  const A=proj[pairIdx[0]],B=proj[pairIdx[1]];
+  x1.strokeStyle='#ef6b73';x1.lineWidth=2.2;
+  x1.beginPath();x1.moveTo(A.x,A.y);x1.lineTo(B.x,B.y);x1.stroke();
+  x1.fillStyle='#ef6b73';x1.font='12px system-ui';
+  x1.fillText('‖·‖='+d1.toFixed(3),(A.x+B.x)/2+4,(A.y+B.y)/2-4);
+  // 点（按深度排序后画，远的先画）
+  const order=proj.slice().sort((a,b)=>a.z-b.z);
+  order.forEach(p=>{
+    const isPair=(p.i===pairIdx[0]||p.i===pairIdx[1]);
+    const rad=(isPair?6:4.2)*p.f;
+    x1.beginPath();x1.arc(p.x,p.y,rad,0,7);
+    x1.fillStyle=isPair?'#ef6b73':'#f5a623';
+    x1.fill();
+    x1.lineWidth=1;x1.strokeStyle='rgba(0,0,0,.5)';x1.stroke();
+  });
+}
+['rx','ry','rz'].forEach(id=>document.getElementById(id).addEventListener('input',draw1));
+
+/* 拖动改视角 */
+function bindDrag(cv,viewObj,redraw){
+  let down=false,lx=0,ly=0;
+  cv.addEventListener('mousedown',e=>{down=true;lx=e.clientX;ly=e.clientY;cv.style.cursor='grabbing';});
+  window.addEventListener('mouseup',()=>{down=false;cv.style.cursor='grab';});
+  window.addEventListener('mousemove',e=>{
+    if(!down)return;
+    viewObj.yaw+=(e.clientX-lx)*0.01; viewObj.pitch+=(e.clientY-ly)*0.01;
+    viewObj.pitch=Math.max(-1.4,Math.min(1.4,viewObj.pitch));
+    lx=e.clientX;ly=e.clientY; redraw();
+  });
+  // 触摸
+  cv.addEventListener('touchstart',e=>{if(e.touches[0]){down=true;lx=e.touches[0].clientX;ly=e.touches[0].clientY;}},{passive:true});
+  cv.addEventListener('touchend',()=>{down=false;});
+  cv.addEventListener('touchmove',e=>{
+    if(!down||!e.touches[0])return;
+    viewObj.yaw+=(e.touches[0].clientX-lx)*0.01; viewObj.pitch+=(e.touches[0].clientY-ly)*0.01;
+    viewObj.pitch=Math.max(-1.4,Math.min(1.4,viewObj.pitch));
+    lx=e.touches[0].clientX;ly=e.touches[0].clientY; redraw();
+  },{passive:true});
+}
+bindDrag(cv1,view1,draw1);
+
+function tick1(){
+  if(curTab===1){
+    if(spin){
+      spinT+=0.6;
+      document.getElementById('ry').value=((spinT%360)>180?(spinT%360)-360:(spinT%360)).toFixed(0);
+    }
+    draw1();
+  }
+  requestAnimationFrame(tick1);
+}
+
+/* ================= VIEW 2：Kabsch 叠合 ================= */
+const cv2=document.getElementById('cv2'), x2=cv2.getContext('2d');
+let view2={yaw:0.5,pitch:-0.35};
+let A2=[], B2=[], B0=[];   // A 参考；B 当前；B0 初始（用于「还原」）
+let kInfo=null;            // 最近一次 Kabsch 结果
+let injectRefl=false;
+
+function randomR(){ // 随机旋转矩阵（绕随机轴随机角，用三轴角合成）
+  return matMul(matMul(Rz(Math.random()*Math.PI*2),Ry(Math.random()*Math.PI*2)),Rx(Math.random()*Math.PI*2));
+}
+function regen2(){
+  const n=+document.getElementById('npt').value;
+  const noise=+document.getElementById('noise').value;
+  document.getElementById('vnpt').textContent=n;
+  document.getElementById('vnoise').textContent=noise.toFixed(2);
+  A2=makeBackbone(n); // 已中心化
+  // B = (A + 噪声) 经随机旋转 + 随机平移
+  const R=randomR();
+  let refl=injectRefl?[[ -1,0,0],[0,1,0],[0,0,1]]:null; // 注入一次反射（手性翻转）
+  const t=[randn()*1.5,randn()*1.5,randn()*1.5];
+  B2=A2.map(p=>{
+    let q=[p[0]+randn()*noise,p[1]+randn()*noise,p[2]+randn()*noise];
+    if(refl)q=matMulVec(refl,q);
+    q=matMulVec(R,q);
+    return [q[0]+t[0],q[1]+t[1],q[2]+t[2]];
+  });
+  B0=B2.map(p=>p.slice());
+  kInfo=null;
+  document.getElementById('rmsd1').textContent='—';
+  document.getElementById('kθ').textContent='—';
+  document.getElementById('kaxis').textContent='—';
+  document.getElementById('kdet').textContent='—';
+  setMat('matH',[[0,0,0],[0,0,0],[0,0,0]]);
+  setMat('matRk',[[1,0,0],[0,1,0],[0,0,1]]);
+  updateRmsd2();
+}
+function forceReflect(){injectRefl=!injectRefl;regen2();}
+function resetB(){B2=B0.map(p=>p.slice());kInfo=null;
+  document.getElementById('rmsd1').textContent='—';
+  document.getElementById('kθ').textContent='—';
+  document.getElementById('kaxis').textContent='—';
+  document.getElementById('kdet').textContent='—';
+  updateRmsd2();}
+function updateRmsd2(){
+  document.getElementById('rmsd0').textContent=rmsd(A2,B0).toFixed(4);
+  document.getElementById('rmsdMin').textContent=(+document.getElementById('noise').value).toFixed(3);
+  if(kInfo)document.getElementById('rmsd1').textContent=rmsd(A2,B2).toFixed(4);
+}
+function runKabsch(){
+  const fix=document.getElementById('fixReflect').checked;
+  const cA=centroid(A2), cB=centroid(B2);
+  const Ac=A2.map(p=>vsub(p,cA));
+  const Bc=B2.map(p=>vsub(p,cB));
+  const {R,H}=kabsch(Ac,Bc,fix);
+  // 把 B 中心化 -> 旋转 -> 平移到 A 的质心
+  B2=Bc.map(p=>{const q=matMulVec(R,p);return [q[0]+cA[0],q[1]+cA[1],q[2]+cA[2]];});
+  const aa=axisAngle(R);
+  kInfo={R,H,aa,det:det3(R)};
+  setMat('matH',H);
+  setMat('matRk',R);
+  document.getElementById('kθ').textContent=(aa.theta*180/Math.PI).toFixed(1)+'°';
+  document.getElementById('kaxis').textContent='('+aa.axis.map(v=>v.toFixed(2)).join(', ')+')';
+  document.getElementById('kdet').textContent=det3(R).toFixed(3);
+  updateRmsd2();
+}
+function draw2(){
+  const {w,h,dpr}=fit(cv2); x2.setTransform(dpr,0,0,dpr,0,0); x2.clearRect(0,0,w,h);
+  const cx=w/2,cy=h/2;
+  // 自适应缩放：根据两套点的最大范围
+  let maxr=1; A2.concat(B2).forEach(p=>{maxr=Math.max(maxr,Math.abs(p[0]),Math.abs(p[1]),Math.abs(p[2]));});
+  const sc=Math.min(w,h)/(maxr*2.6);
+  const view=viewMat(view2.yaw,view2.pitch);
+  // 残差连线（对应点）
+  x2.strokeStyle='#5a607a';x2.lineWidth=1;x2.globalAlpha=0.6;
+  for(let i=0;i<A2.length;i++){
+    const a=project(A2[i],view,cx,cy,sc), b=project(B2[i],view,cx,cy,sc);
+    x2.beginPath();x2.moveTo(a.x,a.y);x2.lineTo(b.x,b.y);x2.stroke();
+  }
+  x2.globalAlpha=1;
+  // 画一套点云（含骨架连线）
+  function drawCloud(pts,col,line){
+    const proj=pts.map((p,i)=>({...project(p,view,cx,cy,sc),i}));
+    x2.strokeStyle=line;x2.lineWidth=2;x2.globalAlpha=0.8;
+    x2.beginPath();
+    for(let i=0;i<proj.length;i++){if(i===0)x2.moveTo(proj[i].x,proj[i].y);else x2.lineTo(proj[i].x,proj[i].y);}
+    x2.stroke();x2.globalAlpha=1;
+    proj.forEach(p=>{x2.beginPath();x2.arc(p.x,p.y,3.8*p.f,0,7);x2.fillStyle=col;x2.fill();
+      x2.lineWidth=1;x2.strokeStyle='rgba(0,0,0,.5)';x2.stroke();});
+  }
+  drawCloud(A2,'#f5a623','#7a5a2e');
+  drawCloud(B2,'#22c7d6','#1d6e77');
+}
+['npt','noise'].forEach(id=>document.getElementById(id).addEventListener('input',regen2));
+bindDrag(cv2,view2,draw2);
+function tick2(){if(curTab===2)draw2();requestAnimationFrame(tick2);}
+
+/* ================= tabs ================= */
+let curTab=1;
+function showTab(n){
+  curTab=n;
+  for(let i=1;i<=2;i++){
+    document.getElementById('view'+i).classList.toggle('active',i===n);
+    document.getElementById('tab'+i).classList.toggle('active',i===n);
+  }
+  if(n===1)draw1(); if(n===2)draw2();
+}
+window.addEventListener('resize',()=>{if(curTab===1)draw1();if(curTab===2)draw2();});
+
+/* ================= init ================= */
+regen2();      // 生成 Kabsch 的两套点云
+draw1();
+requestAnimationFrame(tick1);
+requestAnimationFrame(tick2);
+</script>
+</body>
+</html>

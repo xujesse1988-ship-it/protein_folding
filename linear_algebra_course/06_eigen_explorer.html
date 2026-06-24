@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>特征值 / 特征向量探索器 · 不变方向与拉伸倍数 —— 配套第 6 章</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a24; --panel2:#1f2330; --line:#2b3040;
+    --text:#e7e9f0; --dim:#9aa0b4;
+    --orange:#f5a623;  /* 探针向量 v / 幂法迭代 */
+    --cyan:#22c7d6;    /* 像 Av */
+    --yellow:#ffd166;  /* 特征方向 1（λ₁） */
+    --violet:#b388ff;  /* 特征方向 2（λ₂） */
+    --red:#ef6b73;     /* 复特征值 / 警示 */
+    --green:#7bd88f;   /* 共线命中 */
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;}
+  header{padding:13px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{margin:0;font-size:18px;letter-spacing:.3px}
+  header h1 .c{color:var(--cyan)} header h1 .o{color:var(--orange)}
+  header p{margin:5px 0 0;color:var(--dim);font-size:13px;line-height:1.65}
+  header p b{color:#fff}
+  .wrap{display:flex;height:calc(100% - 80px);min-height:0}
+  .stage{position:relative;flex:1 1 auto;min-width:0;overflow:hidden;
+    background:radial-gradient(circle at 48% 46%,#161a26 0%,#0d0f15 84%)}
+  #cv{display:block;width:100%;height:100%;cursor:crosshair}
+  .legend{position:absolute;left:14px;top:12px;font-size:12.5px;pointer-events:none;
+    background:rgba(15,17,23,.62);padding:8px 11px;border-radius:8px;border:1px solid var(--line);line-height:1.95}
+  .legend .ln{display:inline-block;width:18px;height:0;border-top:3px solid;margin-right:6px;vertical-align:middle}
+  .legend .dn{display:inline-block;width:18px;height:0;border-top:3px dashed;margin-right:6px;vertical-align:middle}
+  .legend .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:middle}
+  .hint{position:absolute;left:14px;bottom:12px;color:var(--dim);font-size:12px;pointer-events:none;
+    background:rgba(15,17,23,.55);padding:6px 10px;border-radius:8px;border:1px solid var(--line);max-width:580px;line-height:1.6}
+  .panel{flex:0 0 422px;max-width:55%;overflow-y:auto;border-left:1px solid var(--line);background:var(--panel);padding:16px}
+  .panel h2{font-size:14px;margin:18px 0 8px;color:#fff}
+  .panel h2:first-child{margin-top:0}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+  button{background:#262b3a;color:var(--text);border:1px solid var(--line);border-radius:8px;
+    padding:7px 11px;font-size:13px;cursor:pointer}
+  button:hover{filter:brightness(1.13)}
+  button.active{background:#2f3a4f;border-color:var(--cyan);color:#fff}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .row{display:flex;align-items:center;gap:10px;margin:9px 0}
+  .row label{flex:0 0 64px;font-weight:600;font-size:13px}
+  input[type=range]{flex:1 1 auto;accent-color:var(--cyan)}
+  .val{flex:0 0 56px;text-align:right;font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px}
+  .stat{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px dashed #2b3040}
+  .stat:last-child{border-bottom:none}
+  .stat span:last-child{color:#fff;font-variant-numeric:tabular-nums}
+  .note{font-size:12.5px;color:var(--dim);line-height:1.85}
+  .note b{color:#e7e9f0}
+  .note .o{color:var(--orange)} .note .c{color:var(--cyan)} .note .y{color:var(--yellow)}
+  .note .v{color:var(--violet)} .note .r{color:var(--red)} .note .g{color:var(--green)}
+  code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#cdd6f4}
+  .presets{display:flex;flex-wrap:wrap;gap:6px}
+  .presets button{flex:1 1 30%;font-size:12px;padding:6px 4px}
+  .btnrow{display:flex;gap:8px;margin-top:6px}
+  .btnrow button{flex:1 1 0}
+  .mat{display:flex;align-items:center;gap:8px;justify-content:center;margin:8px 0 4px;
+    font-variant-numeric:tabular-nums}
+  .mat .lab{color:var(--dim);font-size:13px}
+  .mat .brk{font-size:42px;color:var(--dim);font-weight:200;line-height:.9}
+  .mat .cols{display:flex;gap:14px}
+  .mat .col{display:flex;flex-direction:column;gap:5px}
+  .mat .cell{width:48px;text-align:center;font-size:15px}
+  .mat .c1 .cell{color:var(--orange)} .mat .c2 .cell{color:var(--cyan)}
+  .toggles{display:flex;flex-wrap:wrap;gap:10px;font-size:12.5px}
+  .toggles label{display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--dim)}
+  .toggles input{accent-color:var(--cyan)}
+  .pill{display:inline-block;padding:1px 8px;border-radius:6px;font-size:12px;font-weight:600;margin-left:6px}
+  .pill.real{background:rgba(123,216,143,.16);color:var(--green)}
+  .pill.cplx{background:rgba(239,107,115,.16);color:var(--red)}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="o">特征值</span> / <span class="c">特征向量</span>探索器 · 找出变换里「不转向」的方向</h1>
+  <p>画布上一整圈<b>单位向量 v</b> 经矩阵 A 变换为 <b style="color:var(--cyan)">Av</b>；绝大多数方向都被「转走」，只有落在<b>特征方向</b>（黄 / 紫虚线）上的 v 其像 Av 与自己<b>共线</b>——这时 A 对它只是纯拉伸 λ 倍。点「幂法迭代」看反复施加 A 如何把任意向量<b>吸到主特征向量</b>；对纯旋转矩阵则看到「无实不变方向」。配套《线性代数深度入门》第 6 章 §6.3「特征值与特征向量」、§6.5「迹·行列式·矩阵幂」与 §6.6「复特征值 = 旋转」。折叠连接：主成分轴（PCA）、马尔可夫稳态、动力系统长期行为都由谱（特征值）决定。</p>
+</header>
+<div class="wrap">
+  <div class="stage">
+    <canvas id="cv"></canvas>
+    <div class="legend" id="legend"></div>
+    <div class="hint" id="hint"></div>
+  </div>
+  <div class="panel">
+
+    <h2>矩阵 A（按列输入）</h2>
+    <div class="card">
+      <div class="mat">
+        <span class="lab">A =</span>
+        <span class="brk">[</span>
+        <div class="cols">
+          <div class="col c1"><div class="cell" id="cA">2.00</div><div class="cell" id="cC">0.00</div></div>
+          <div class="col c2"><div class="cell" id="cB">0.00</div><div class="cell" id="cD">0.50</div></div>
+        </div>
+        <span class="brk">]</span>
+      </div>
+      <div class="note" style="text-align:center;margin-bottom:6px">左列(<span style="color:var(--orange)">橙</span>)=e₁ 去向，右列(<span style="color:var(--cyan)">青</span>)=e₂ 去向</div>
+      <div class="row"><label>a (1,1)</label><input id="sA" type="range" min="-3" max="3" step="0.05" value="2"><span class="val" id="vA">2.00</span></div>
+      <div class="row"><label>b (1,2)</label><input id="sB" type="range" min="-3" max="3" step="0.05" value="0"><span class="val" id="vB">0.00</span></div>
+      <div class="row"><label>c (2,1)</label><input id="sC" type="range" min="-3" max="3" step="0.05" value="0"><span class="val" id="vC">0.00</span></div>
+      <div class="row"><label>d (2,2)</label><input id="sD" type="range" min="-3" max="3" step="0.05" value="0.5"><span class="val" id="vD">0.50</span></div>
+      <div class="toggles" style="margin-top:8px">
+        <label><input type="checkbox" id="tSym"> 强制对称 (c=b)</label>
+        <label><input type="checkbox" id="tRing" checked> 单位圆向量场</label>
+        <label><input type="checkbox" id="tProbe" checked> 可拖探针 v</label>
+      </div>
+    </div>
+
+    <h2>谱体检报告（§6.5.1）</h2>
+    <div class="card">
+      <div class="stat"><span>迹 tr A = a+d = λ₁+λ₂</span><span id="oTr">2.50</span></div>
+      <div class="stat"><span>行列式 det A = ad−bc = λ₁·λ₂</span><span id="oDet">1.00</span></div>
+      <div class="stat"><span>判别式 (trA)²−4detA</span><span id="oDisc">2.25</span></div>
+      <div class="stat"><span>特征值 λ₁, λ₂ <span id="oKind" class="pill real">实</span></span><span id="oLam">2.00, 0.50</span></div>
+      <div class="stat"><span>谱半径 ρ(A)=max|λ|</span><span id="oRho">2.00</span></div>
+      <div class="note" id="oVerdict" style="margin-top:8px"></div>
+    </div>
+
+    <h2>幂法动画：迭代收敛到主特征向量（§6.5.2）</h2>
+    <div class="card">
+      <div class="note">反复施加 A 并归一化：<code>v ← Av / ‖Av‖</code>。只要主特征值严格最大（|λ₁|&gt;|λ₂|），任意起点都会被吸到<b class="y">主特征向量</b>方向，长度比趋于 |λ₁|。纯旋转 / 复特征值则永远转圈不收敛。</div>
+      <div class="btnrow">
+        <button id="bStep">单步 v←Av/‖Av‖</button>
+        <button id="bPlay">▶ 连续迭代</button>
+        <button id="bReset">重置 v</button>
+      </div>
+      <div class="stat" style="margin-top:8px"><span>迭代步数 k</span><span id="oIter">0</span></div>
+      <div class="stat"><span>本步长度比 ‖Av‖/‖v‖（→ |λ₁|）</span><span id="oRatio">—</span></div>
+      <div class="stat"><span>探针 v 与主特征向量夹角</span><span id="oAlign">—</span></div>
+    </div>
+
+    <h2>六个必玩现象（§6.3 / §6.6）</h2>
+    <div class="card">
+      <div class="presets">
+        <button data-m="2,0,0,0.5">对角拉伸</button>
+        <button data-m="2,1,1,2">对称(正交)</button>
+        <button data-m="rot40">纯旋转 40°</button>
+        <button data-m="1,1,1,1">列相关(奇异)</button>
+        <button data-m="1,0.6,0,1">剪切(亏损)</button>
+        <button data-m="0.92,-0.5,0.5,0.92">外旋螺旋</button>
+      </div>
+      <div class="note" style="margin-top:10px">
+        <p><b class="y">① 对称 ⇒ 特征方向正交</b>：点「对称(正交)」，两条虚线<b>互相垂直</b>（谱定理，§6.6.2 / 第 7 章）。保持 c=b 乱改 a,d，两线永远成 90°。</p>
+        <p><b class="r">② 纯旋转 ⇒ 实特征方向消失</b>：点「纯旋转 40°」，判别式&lt;0、特征值变复，<b>两条虚线一起消失</b>——整圈 Av 与 v 处处不共线，没有被钉住的实方向（§6.6.1）。开「连续迭代」会看到永远转圈、不收敛。</p>
+        <p><b class="o">③ 列相关 ⇒ 出现 λ=0</b>：「列相关(奇异)」第 2 列=第 1 列，det=0、一个 λ=0，对应方向被压进零空间、像长度归零（§6.1.2）。</p>
+        <p><b class="v">④ 剪切 ⇒ 亏损（只 1 个方向）</b>：「剪切(亏损)」λ₁=λ₂=1 却只有一条特征方向，不可对角化（§6.4.2）。</p>
+      </div>
+    </div>
+
+    <h2>怎么读这张图</h2>
+    <div class="card note">
+      <p><b>核心</b>：单位圆上每个方向都画一根<span class="c">短青线</span>连到它的像 Av。大多数 v 被<b>转向</b>；只有落在<span class="y">特征方向</span>上的 v，青线退化成<b>沿同一条直线</b>——A 对它就是纯数乘 λ（§6.3.1）。</p>
+      <p><b>λ 的符号 / 大小</b>：Av 与 v 同向 ⇒ λ&gt;0；反向 ⇒ λ&lt;0；Av 更长 ⇒ |λ|&gt;1（拉伸），更短 ⇒ |λ|&lt;1（压缩），长度 0 ⇒ λ=0。</p>
+      <p><b>迹·行列式·谱半径</b>：2×2 满足 λ²−(trA)λ+detA=0；判别式符号一眼判实(≥0)还是复(&lt;0，含旋转，§6.6)。谱半径 ρ&lt;1 ⇒ 反复施加 A 收缩到 0；ρ&gt;1 ⇒ 爆炸；这决定线性动力系统 / 马尔可夫链的长期命运（§6.5.3）。</p>
+      <p><b>对照练习</b>：本页与第 6 章练习 4、5、7、8 配套——验证对称阵正交对角化、判可否对角化、复特征值=旋转、幂法收敛到主特征向量。</p>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const legendEl = document.getElementById('legend');
+const hintEl   = document.getElementById('hint');
+
+// 矩阵 A = [[a,b],[c,d]]（row-major）。a,c 为第 1 列；b,d 为第 2 列。
+let M = {a:2,b:0,c:0,d:0.5};
+let v = {x:1, y:0};            // 可拖探针向量（也作为幂法迭代的当前向量）
+let iter = 0;                  // 幂法步数
+let lastRatio = null;          // 上一步 ‖Av‖/‖v‖
+let playing = false;           // 连续迭代开关
+let lastPlayT = 0;             // 连续迭代节流计时
+let DPR=1,W=0,H=0,cx=0,cy=0,scale=60;
+
+// ---------- 画布尺寸 / DPR 适配 ----------
+function resize(){
+  DPR = window.devicePixelRatio||1;
+  const r = cv.getBoundingClientRect();
+  W=r.width; H=r.height;
+  cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  cx=W/2; cy=H/2;
+  scale=Math.max(40, Math.min(W,H)/8.5);   // 像素/单位
+  draw();
+}
+window.addEventListener('resize', resize);
+
+// 世界坐标 <-> 屏幕坐标
+function sx(x){ return cx + x*scale; }
+function sy(y){ return cy - y*scale; }
+function wx(px){ return (px-cx)/scale; }
+function wy(py){ return (cy-py)/scale; }
+
+// ---------- 数学 ----------
+function apply(x,y){ return [M.a*x + M.b*y, M.c*x + M.d*y]; }
+function det(){ return M.a*M.d - M.b*M.c; }
+function tr(){ return M.a + M.d; }
+
+// 2×2 实特征值与特征方向；复数返回 complex:true
+function eig(){
+  const t=tr(), dt=det();
+  const disc = t*t - 4*dt;
+  if(disc < -1e-12){
+    return {complex:true, disc, l1:null, l2:null, dirs:[]};
+  }
+  const s = Math.sqrt(Math.max(0,disc));
+  let l1=(t+s)/2, l2=(t-s)/2;
+  // 让 |λ₁| ≥ |λ₂|，使「主特征向量」始终是 dirs[0]
+  if(Math.abs(l2) > Math.abs(l1)){ const tmp=l1; l1=l2; l2=tmp; }
+  return {complex:false, disc, l1, l2, dirs:[eigvec(l1), eigvec(l2)]};
+}
+// 求 (A-λI)w=0 的单位解：取范数较大的那行做零空间，稳健处理退化
+function eigvec(lam){
+  const a=M.a-lam, b=M.b, c=M.c, d=M.d-lam;
+  let w;
+  if(Math.hypot(a,b) > Math.hypot(c,d)) w=[-b, a]; else w=[-d, c];
+  let n=Math.hypot(w[0],w[1]);
+  if(n<1e-9){ w=[1,0]; n=1; }   // λI（标量阵）：任意方向都是特征向量
+  return [w[0]/n, w[1]/n];
+}
+function fmt(x){ return (Math.abs(x)<1e-9?0:x).toFixed(2); }
+function angDeg(x,y){ return Math.atan2(y,x)*180/Math.PI; }
+
+// ---------- 绘图基元 ----------
+function line(x0,y0,x1,y1,col,wd,dash){
+  ctx.save(); ctx.beginPath(); ctx.setLineDash(dash||[]);
+  ctx.moveTo(sx(x0),sy(y0)); ctx.lineTo(sx(x1),sy(y1));
+  ctx.strokeStyle=col; ctx.lineWidth=wd; ctx.stroke(); ctx.restore();
+}
+function arrow(x,y,col,wd,label,handle){
+  const X=sx(x),Y=sy(y),X0=sx(0),Y0=sy(0);
+  ctx.beginPath(); ctx.moveTo(X0,Y0); ctx.lineTo(X,Y);
+  ctx.strokeStyle=col; ctx.lineWidth=wd; ctx.stroke();
+  const ang=Math.atan2(Y-Y0,X-X0), hl=11;
+  ctx.beginPath(); ctx.moveTo(X,Y);
+  ctx.lineTo(X-hl*Math.cos(ang-0.4),Y-hl*Math.sin(ang-0.4));
+  ctx.lineTo(X-hl*Math.cos(ang+0.4),Y-hl*Math.sin(ang+0.4));
+  ctx.closePath(); ctx.fillStyle=col; ctx.fill();
+  if(handle){ ctx.beginPath(); ctx.arc(X,Y,6,0,7); ctx.fillStyle=col; ctx.fill(); }
+  if(label){ ctx.fillStyle=col; ctx.font='600 13px system-ui'; ctx.fillText(label, X+9, Y-7); }
+}
+
+// ---------- 主绘制 ----------
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const N=7;
+  // 背景网格 + 轴
+  for(let i=-N;i<=N;i++){
+    line(i,-N,i,N,'rgba(120,130,160,.07)',1);
+    line(-N,i,N,i,'rgba(120,130,160,.07)',1);
+  }
+  line(-N,0,N,0,'rgba(200,210,235,.18)',1);
+  line(0,-N,0,N,'rgba(200,210,235,.18)',1);
+
+  const e=eig();
+
+  // 单位圆向量场：一整圈 v（单位圆，细灰）→ 它们的像 Av（青短线 + 端点）
+  if(tRing.checked){
+    // 单位圆（v 所在）
+    ctx.beginPath();
+    for(let t=0;t<=72;t++){ const a=t/72*2*Math.PI; const X=sx(Math.cos(a)),Y=sy(Math.sin(a)); t?ctx.lineTo(X,Y):ctx.moveTo(X,Y); }
+    ctx.closePath(); ctx.strokeStyle='rgba(154,160,180,.30)'; ctx.lineWidth=1; ctx.stroke();
+    // 像椭圆（Av 描出的曲线）
+    ctx.beginPath();
+    for(let t=0;t<=72;t++){ const a=t/72*2*Math.PI; const p=apply(Math.cos(a),Math.sin(a)); const X=sx(p[0]),Y=sy(p[1]); t?ctx.lineTo(X,Y):ctx.moveTo(X,Y); }
+    ctx.closePath(); ctx.strokeStyle='rgba(34,199,214,.35)'; ctx.lineWidth=1.2; ctx.stroke();
+    // 一圈连线：v(圆上) → Av，并按「是否近共线」着色（命中特征方向时变绿）
+    const S=36;
+    for(let i=0;i<S;i++){
+      const a=i/S*2*Math.PI, vx=Math.cos(a), vy=Math.sin(a);
+      const p=apply(vx,vy);
+      const lp=Math.hypot(p[0],p[1]);
+      let col='rgba(34,199,214,.45)';
+      if(lp>1e-9){
+        const cosT=(vx*p[0]+vy*p[1])/lp;                 // v 单位长，省去 /‖v‖
+        const dg=Math.acos(Math.max(-1,Math.min(1,cosT)))*180/Math.PI;
+        if(dg<4 || dg>176) col='rgba(123,216,143,.9)';   // 近共线 = 命中特征方向
+      }
+      line(vx,vy,p[0],p[1],col,1.2);
+      // 像端点
+      ctx.beginPath(); ctx.arc(sx(p[0]),sy(p[1]),1.8,0,7); ctx.fillStyle='rgba(34,199,214,.65)'; ctx.fill();
+    }
+  }
+
+  // 特征方向（过原点整条直线）+ λ 标注
+  if(!e.complex){
+    const cols=['#ffd166','#b388ff'];
+    e.dirs.forEach((w,i)=>{
+      line(-N*w[0],-N*w[1], N*w[0], N*w[1], cols[i], 2, [7,5]);
+      const lx=2.6*w[0], ly=2.6*w[1];
+      ctx.fillStyle=cols[i]; ctx.font='600 12px system-ui';
+      ctx.fillText('λ'+(i+1)+'='+fmt(i===0?e.l1:e.l2), sx(lx)+4, sy(ly)-4);
+    });
+  } else {
+    // 复特征值：画面中央提示「无实不变方向」
+    ctx.fillStyle='rgba(239,107,115,.85)'; ctx.font='600 13px system-ui'; ctx.textAlign='center';
+    ctx.fillText('复特征值 ⇒ 无实特征方向（纯旋转成分）', cx, 24);
+    ctx.textAlign='left';
+  }
+
+  // 探针 v（橙）与像 Av（青），用于命中读数与幂法
+  if(tProbe.checked){
+    const av = apply(v.x, v.y);
+    arrow(av[0], av[1], '#22c7d6', 3.4, 'Av');
+    arrow(v.x, v.y, '#f5a623', 3.4, 'v', true);
+  }
+}
+
+// ---------- 读数面板 ----------
+function update(){
+  cA.textContent=fmt(M.a); cC.textContent=fmt(M.c);
+  cB.textContent=fmt(M.b); cD.textContent=fmt(M.d);
+  vA.textContent=fmt(M.a); vB.textContent=fmt(M.b); vC.textContent=fmt(M.c); vD.textContent=fmt(M.d);
+  oTr.textContent=fmt(tr()); oDet.textContent=fmt(det());
+  const e=eig(); oDisc.textContent=fmt(e.disc);
+
+  let rho;
+  if(e.complex){
+    const re=tr()/2, im=Math.sqrt(-e.disc)/2;
+    oLam.textContent = fmt(re)+' ± '+fmt(im)+'i';
+    oKind.textContent='复'; oKind.className='pill cplx';
+    rho = Math.sqrt(Math.max(0,det()));               // |λ| = √det（实矩阵复共轭对）
+  } else {
+    oLam.textContent = fmt(e.l1)+', '+fmt(e.l2);
+    oKind.textContent='实'; oKind.className='pill real';
+    rho = Math.max(Math.abs(e.l1), Math.abs(e.l2));
+  }
+  oRho.textContent = fmt(rho);
+
+  // 幂法读数
+  oIter.textContent = iter;
+  oRatio.textContent = (lastRatio==null)?'—':fmt(lastRatio);
+  if(!e.complex){
+    const w=e.dirs[0];                                  // 主特征方向（|λ| 最大）
+    const nv=Math.hypot(v.x,v.y);
+    if(nv>1e-9){
+      let cosT=Math.abs((v.x*w[0]+v.y*w[1])/nv);        // 取绝对值：方向线不分正负
+      cosT=Math.max(0,Math.min(1,cosT));
+      oAlign.textContent = (Math.acos(cosT)*180/Math.PI).toFixed(1)+'°';
+    } else oAlign.textContent='—';
+  } else {
+    oAlign.textContent = '不收敛（旋转）';
+  }
+
+  // 结论文本
+  let ver='';
+  if(e.complex){
+    ver='<span class="r">复特征值 '+oLam.textContent+'</span>：判别式&lt;0、含旋转成分，<b>没有实特征方向</b>（虚线消失）。模 |λ|=√det='+fmt(rho)+'（&gt;1 外旋、&lt;1 内旋、=1 纯旋转）。幂法在此<b>不收敛</b>——探针只会一圈圈打转（§6.6.1）。';
+  } else if(Math.abs(det())<1e-6){
+    ver='<span class="o">奇异：有 λ=0</span>。det=0 ⇔ 列相关 ⇔ 不可逆；对应方向被压进零空间（像长度归零，§6.1.2 / §6.3.1）。';
+  } else {
+    const lossy = !e.complex && Math.abs(e.l1-e.l2)<1e-4 && Math.hypot(e.dirs[0][0]-e.dirs[1][0],e.dirs[0][1]-e.dirs[1][1])<1e-3;
+    if(lossy){
+      ver='<span class="v">重特征值且方向唯一（亏损）</span>：λ₁=λ₂ 但只有一条特征方向，<b>不可对角化</b>（§6.4.2）。幂法仍会爬向这唯一方向，但收敛慢。';
+    } else {
+      ver='<span class="g">两条实特征方向</span>：'
+        + (Math.abs(e.l1)>Math.abs(e.l2)+1e-6
+            ? '主特征值 |λ₁|='+fmt(Math.abs(e.l1))+' 严格更大 ⇒ <b>幂法会收敛到黄线（主特征向量）</b>（§6.5.2）。'
+            : '|λ₁|≈|λ₂| ⇒ 幂法可能在两方向间拉锯、收敛缓慢。');
+    }
+    if(Math.abs(M.b-M.c)<1e-6){
+      ver+=' <span class="y">对称矩阵</span>：两特征方向<b>互相正交</b>（谱定理，§6.6.2 / 第 7 章）。';
+    }
+    // 谱半径与长期行为
+    if(rho<1-1e-6) ver+=' ρ='+fmt(rho)+'&lt;1 ⇒ 反复施加 A 收缩到 0。';
+    else if(rho>1+1e-6) ver+=' ρ='+fmt(rho)+'&gt;1 ⇒ 反复施加 A 爆炸增长。';
+  }
+  oVerdict.innerHTML=ver;
+  draw();
+}
+
+// ---------- 幂法迭代 ----------
+function powerStep(){
+  const av=apply(v.x,v.y);
+  const nav=Math.hypot(av[0],av[1]);
+  const nv=Math.hypot(v.x,v.y);
+  if(nav<1e-9){ lastRatio=0; iter++; update(); return; }   // 落入零空间
+  lastRatio = nav/(nv||1);
+  v.x=av[0]/nav; v.y=av[1]/nav;                            // 归一化，避免溢出
+  iter++;
+  update();
+}
+function resetProbe(){ v={x:Math.SQRT1_2, y:Math.SQRT1_2}; iter=0; lastRatio=null; update(); }
+
+// requestAnimationFrame 驱动连续迭代（节流到每 ~280ms 一步，肉眼可跟）
+function loop(t){
+  if(playing){
+    if(t-lastPlayT > 280){ lastPlayT=t; powerStep(); }
+    requestAnimationFrame(loop);
+  }
+}
+function setPlay(on){
+  playing=on;
+  bPlay.textContent = on ? '⏸ 暂停迭代' : '▶ 连续迭代';
+  bPlay.classList.toggle('active', on);
+  if(on){ lastPlayT=0; requestAnimationFrame(loop); }
+}
+
+bStep.onclick =()=>{ if(playing) setPlay(false); powerStep(); };
+bPlay.onclick =()=> setPlay(!playing);
+bReset.onclick=()=>{ resetProbe(); };
+
+// ---------- 矩阵滑块 ----------
+function setSliders(){ sA.value=M.a; sB.value=M.b; sC.value=M.c; sD.value=M.d; }
+function clamp(x){ return Math.max(-3,Math.min(3,x)); }
+function onMat(){ iter=0; lastRatio=null; update(); }  // 改矩阵则幂法计数复位
+
+sA.oninput=e=>{M.a=+e.target.value;onMat();};
+sB.oninput=e=>{M.b=+e.target.value; if(tSym.checked){M.c=M.b;setSliders();} onMat();};
+sC.oninput=e=>{M.c=+e.target.value; if(tSym.checked){M.b=M.c;setSliders();} onMat();};
+sD.oninput=e=>{M.d=+e.target.value;onMat();};
+tSym.onchange =()=>{ if(tSym.checked){M.c=M.b;setSliders();} onMat(); };
+tRing.onchange=draw;
+tProbe.onchange=draw;
+
+// ---------- 预设 ----------
+document.querySelectorAll('.presets button').forEach(btn=>{
+  btn.onclick=()=>{
+    const m=btn.dataset.m;
+    if(m==='rot40'){
+      const th=40*Math.PI/180;
+      M={a:Math.cos(th), b:-Math.sin(th), c:Math.sin(th), d:Math.cos(th)};
+    } else {
+      const p=m.split(',').map(Number); // a,b,c,d row-major
+      M={a:p[0],b:p[1],c:p[2],d:p[3]};
+    }
+    tSym.checked = Math.abs(M.b-M.c)<1e-9;
+    setSliders(); onMat();
+  };
+});
+
+// ---------- 拖动探针 v ----------
+let drag=false;
+cv.addEventListener('pointerdown',e=>{
+  if(!tProbe.checked) return;
+  const r=cv.getBoundingClientRect(), px=e.clientX-r.left, py=e.clientY-r.top;
+  if(Math.hypot(px-sx(v.x),py-sy(v.y))<16){ drag=true; if(playing) setPlay(false); cv.setPointerCapture(e.pointerId); }
+});
+cv.addEventListener('pointermove',e=>{
+  if(!drag) return;
+  const r=cv.getBoundingClientRect(), px=e.clientX-r.left, py=e.clientY-r.top;
+  v.x = clamp(wx(px)); v.y = clamp(wy(py));
+  const n=Math.hypot(v.x,v.y); if(n<0.4){ v.x=0.4*(v.x/(n||1)); v.y=0.4*(v.y/(n||1)); }  // 保持可见长度
+  iter=0; lastRatio=null;     // 手动转动探针即重新开始幂法
+  update();
+});
+cv.addEventListener('pointerup',()=>{drag=false;});
+cv.addEventListener('pointerleave',()=>{drag=false;});
+
+// ---------- 图例 / 提示 ----------
+legendEl.innerHTML =
+  '<div><span class="ln" style="border-color:var(--orange)"></span><b style="color:var(--orange)">探针 v</b>（可拖动 / 幂法当前向量）</div>'+
+  '<div><span class="ln" style="border-color:var(--cyan)"></span>它的像 <b style="color:var(--cyan)">Av</b></div>'+
+  '<div><span class="dot" style="background:rgba(154,160,180,.6)"></span>单位圆上一圈 v &nbsp;→&nbsp; <span class="dot" style="background:rgba(34,199,214,.7)"></span>像 Av（青线）</div>'+
+  '<div><span class="ln" style="border-color:var(--green)"></span>近共线 = <b style="color:var(--green)">命中特征方向</b></div>'+
+  '<div><span class="dn" style="border-color:var(--yellow)"></span>主特征方向 λ₁ &nbsp;<span class="dn" style="border-color:var(--violet)"></span>λ₂</div>';
+hintEl.innerHTML='动手提示（§6.3 / §6.5.2）：① 拖<b>橙色探针 v</b>找绿色「命中」位置，此刻 Av/v=λ；② 点「<b>连续迭代</b>」看任意起点被吸到<b class="y">黄线（主特征向量）</b>；③ 点「<b>纯旋转 40°</b>」看实特征方向消失、幂法永不收敛（§6.6.1）。';
+
+// 初始化
+resize();
+resetProbe();
+</script>
+</body>
+</html>
