@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>二维高斯 · 协方差 / 精度矩阵 · 条件分布 —— 配套第 5 章</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a24; --panel2:#1f2330; --line:#2b3040;
+    --text:#e7e9f0; --dim:#9aa0b4;
+    --orange:#f5a623;  /* 等高线 / Σ */
+    --cyan:#22c7d6;    /* 散点 / 主轴 */
+    --yellow:#ffd166;  /* 条件切片 / 回归线 */
+    --red:#ef6b73;     /* 精度矩阵 / 警示 */
+    --green:#7bd88f;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;}
+  header{padding:13px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{margin:0;font-size:18px;letter-spacing:.3px}
+  header h1 .c{color:var(--cyan)} header h1 .o{color:var(--orange)}
+  header p{margin:4px 0 0;color:var(--dim);font-size:13px;line-height:1.6}
+  header p b{color:#fff}
+  .wrap{display:flex;height:calc(100% - 68px);min-height:0}
+  .stage{position:relative;flex:1 1 auto;min-width:0;overflow:auto;
+    background:radial-gradient(circle at 46% 42%,#161a26 0%,#0d0f15 82%)}
+  #cv{display:block}
+  .legend{position:absolute;left:14px;top:12px;font-size:12.5px;pointer-events:none;
+    background:rgba(15,17,23,.62);padding:8px 11px;border-radius:8px;border:1px solid var(--line);line-height:1.95}
+  .legend .bar{display:inline-block;width:16px;height:9px;border-radius:3px;margin-right:6px;vertical-align:middle}
+  .legend .ln{display:inline-block;width:18px;height:0;border-top:2px solid;margin-right:6px;vertical-align:middle}
+  .hint{position:absolute;left:14px;bottom:12px;color:var(--dim);font-size:12px;pointer-events:none;
+    background:rgba(15,17,23,.55);padding:6px 10px;border-radius:8px;border:1px solid var(--line);max-width:560px;line-height:1.6}
+  .panel{flex:0 0 404px;max-width:52%;overflow-y:auto;border-left:1px solid var(--line);background:var(--panel);padding:16px}
+  .panel h2{font-size:14px;margin:18px 0 8px;color:#fff}
+  .panel h2:first-child{margin-top:0}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+  button{background:#262b3a;color:var(--text);border:1px solid var(--line);border-radius:8px;
+    padding:7px 11px;font-size:13px;cursor:pointer}
+  button:hover{filter:brightness(1.13)}
+  .row{display:flex;align-items:center;gap:10px;margin:9px 0}
+  .row label{flex:0 0 92px;font-weight:600;font-size:13px}
+  input[type=range]{flex:1 1 auto;accent-color:var(--cyan)}
+  .val{flex:0 0 56px;text-align:right;font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px}
+  .stat{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px dashed #2b3040}
+  .stat:last-child{border-bottom:none}
+  .stat span:last-child{color:#fff;font-variant-numeric:tabular-nums}
+  .note{font-size:12.5px;color:var(--dim);line-height:1.82}
+  .note b{color:#e7e9f0}
+  .note .o{color:var(--orange)} .note .c{color:var(--cyan)} .note .y{color:var(--yellow)} .note .r{color:var(--red)}
+  code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#cdd6f4}
+  .btnrow{display:flex;gap:8px}
+  .btnrow button{flex:1 1 0}
+  .presets{display:flex;flex-wrap:wrap;gap:6px}
+  .presets button{flex:1 1 30%;font-size:12px;padding:6px 4px}
+  /* matrix display */
+  .mat{display:flex;align-items:center;gap:10px;justify-content:center;margin:6px 0 2px;
+    font-variant-numeric:tabular-nums}
+  .mat .lab{color:var(--dim);font-size:13px;width:30px;text-align:right}
+  .mat table{border-collapse:collapse;position:relative}
+  .mat td{padding:5px 12px;text-align:center;font-size:14px;min-width:60px;font-variant-numeric:tabular-nums}
+  .mat .br{border-left:2px solid var(--dim);border-top:2px solid var(--dim);border-bottom:2px solid var(--dim);width:5px;padding:0}
+  .mat .brr{border-right:2px solid var(--dim);border-top:2px solid var(--dim);border-bottom:2px solid var(--dim);width:5px;padding:0}
+  .mat.sig td{color:var(--orange)}
+  .mat.lam td{color:var(--red)}
+  .mat .off{font-weight:700;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px}
+  .cond{font-variant-numeric:tabular-nums}
+  .cond .big{font-size:15px;color:#fff}
+  .badge{display:inline-block;padding:1px 7px;border-radius:6px;font-weight:700;font-variant-numeric:tabular-nums}
+  .kbd{font-family:ui-monospace,Menlo,Consolas,monospace;background:#262b3a;border:1px solid var(--line);
+    border-radius:4px;padding:0 5px;color:#cdd6f4;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>二维高斯：<span class="o">协方差 Σ</span> · <span class="c">主轴 / 散点</span> · 条件分布 · 精度矩阵 Λ</h1>
+  <p>配套《概率与统计深度入门》<b>第 5 章 多元高斯（§5.2–§5.4）</b>。拖 σx、σy、ρ 改变协方差 <b style="color:var(--orange)">Σ</b>，看等高椭圆、采样散点与主轴（Σ 的特征向量）；拖竖直滑杆选 <b>x = x₀</b>，看 2D 椭圆被压成 1D <b style="color:var(--yellow)">条件高斯</b>（条件均值=回归线，条件方差变小）；右侧实时比较 <b style="color:var(--orange)">Σ</b> 与精度矩阵 <b style="color:var(--red)">Λ = Σ⁻¹</b>——<b>表观相关写在 Σ，直接依赖写在 Λ 的非对角元</b>。</p>
+</header>
+
+<div class="wrap">
+  <div class="stage" id="stage">
+    <canvas id="cv"></canvas>
+    <div class="legend">
+      <div><span class="bar" style="background:var(--orange)"></span>密度等高椭圆（1σ/2σ/3σ）</div>
+      <div><span class="bar" style="background:var(--cyan)"></span>采样散点（从 N(0,Σ) 抽）</div>
+      <div><span class="ln" style="border-color:var(--cyan)"></span>主轴 = Σ 的特征向量（半长 ∝ √λ）</div>
+      <div><span class="ln" style="border-color:var(--yellow)"></span>条件切片 x = x₀ &nbsp;<span class="ln" style="border-color:var(--orange);border-top-style:dashed"></span>回归线 𝔼[y|x]</div>
+    </div>
+    <div class="hint" id="hint">拖动图中竖直 <b style="color:var(--yellow)">黄色滑杆</b>（或拖整条黄线）选择 x = x₀；切片处的小高斯曲线就是条件分布 N(μ<sub>y|x</sub>, σ²<sub>y|x</sub>)。</div>
+  </div>
+
+  <div class="panel">
+    <h2>协方差参数</h2>
+    <div class="card">
+      <div class="row">
+        <label>σ<sub>x</sub></label>
+        <input id="sx" type="range" min="0.3" max="3" step="0.02" value="1.6">
+        <div class="val" id="sxV">1.60</div>
+      </div>
+      <div class="row">
+        <label>σ<sub>y</sub></label>
+        <input id="sy" type="range" min="0.3" max="3" step="0.02" value="1.0">
+        <div class="val" id="syV">1.00</div>
+      </div>
+      <div class="row">
+        <label>ρ（相关）</label>
+        <input id="rho" type="range" min="-0.97" max="0.97" step="0.01" value="0.7">
+        <div class="val" id="rhoV">0.70</div>
+      </div>
+      <div class="row">
+        <label>x₀ 切片</label>
+        <input id="x0" type="range" min="-4.2" max="4.2" step="0.02" value="1.4">
+        <div class="val" id="x0V">1.40</div>
+      </div>
+      <div class="row">
+        <label>样本数 n</label>
+        <input id="ns" type="range" min="0" max="2500" step="50" value="900">
+        <div class="val" id="nsV">900</div>
+      </div>
+      <div class="presets" style="margin-top:6px">
+        <button data-p="iso">各向同性 ρ=0</button>
+        <button data-p="strong">强相关 ρ=0.9</button>
+        <button data-p="neg">负相关 ρ=−0.8</button>
+        <button data-p="thin">瘦椭圆</button>
+        <button data-p="dca">链式 (DCA)</button>
+        <button data-p="resample">↻ 重抽样</button>
+      </div>
+    </div>
+
+    <h2>协方差矩阵 Σ 与精度矩阵 Λ = Σ⁻¹</h2>
+    <div class="card">
+      <div class="mat sig">
+        <div class="lab">Σ =</div>
+        <table><tr>
+          <td class="br"></td>
+          <td id="s00">2.56</td><td class="off" id="s01">1.12</td>
+          <td class="brr"></td>
+        </tr><tr>
+          <td class="br"></td>
+          <td class="off" id="s10">1.12</td><td id="s11">1.00</td>
+          <td class="brr"></td>
+        </tr></table>
+      </div>
+      <div class="mat lam">
+        <div class="lab">Λ =</div>
+        <table><tr>
+          <td class="br"></td>
+          <td id="l00">0.77</td><td class="off" id="l01">−0.86</td>
+          <td class="brr"></td>
+        </tr><tr>
+          <td class="br"></td>
+          <td class="off" id="l10">−0.86</td><td id="l11">1.96</td>
+          <td class="brr"></td>
+        </tr></table>
+      </div>
+      <div class="note" style="margin-top:8px">
+        对角是各自方差 <code>σ²</code>；<b class="o">Σ 的非对角</b> = 协方差 <code>ρσ<sub>x</sub>σ<sub>y</sub></code>（<b>表观相关</b>，含一切间接路径）。<b class="r">Λ 的非对角</b> 才编码<b>条件依赖</b>：<code>Λ₁₂=0 ⇔ 给定其余变量后 x,y 条件独立</code>。两个变量时 ρ≠0 则两者都非零；但<b>多变量</b>时（点「链式 DCA」感受）协方差会被<b>传递相关</b>污染、精度矩阵不会——这正是接触预测要用 <b class="r">Λ</b> 而非 Σ 的理由。
+      </div>
+      <div class="stat" style="margin-top:6px"><span>det Σ = σ²<sub>x</sub>σ²<sub>y</sub>(1−ρ²)</span><span id="detS">0.94</span></div>
+      <div class="stat"><span>偏相关 −Λ₁₂/√(Λ₁₁Λ₂₂) = ρ</span><span id="pcor">0.70</span></div>
+      <div class="stat"><span>特征值 λ₁, λ₂（主轴方差）</span><span id="eig">3.13, 0.43</span></div>
+    </div>
+
+    <h2>条件分布 y | x = x₀</h2>
+    <div class="card cond">
+      <div style="text-align:center;margin-bottom:8px" class="big">
+        y | x=x₀ &nbsp;~&nbsp; N(<span class="badge" style="background:rgba(245,166,35,.18);color:var(--orange)" id="cMu">0.61</span>, <span class="badge" style="background:rgba(255,209,102,.18);color:var(--yellow)" id="cVar">0.51</span>)
+      </div>
+      <div class="stat"><span>条件均值 μ<sub>y|x</sub> = ρ·(σ<sub>y</sub>/σ<sub>x</sub>)·x₀</span><span id="cMu2">0.612</span></div>
+      <div class="stat"><span>&nbsp;&nbsp;= 回归线斜率 × x₀，斜率 =</span><span id="cSlope">0.438</span></div>
+      <div class="stat"><span>条件方差 σ²<sub>y|x</sub> = σ²<sub>y</sub>(1−ρ²)</span><span id="cVar2">0.510</span></div>
+      <div class="stat"><span>条件标准差 σ<sub>y|x</sub></span><span id="cSd">0.714</span></div>
+      <div class="stat"><span>边缘方差 σ²<sub>y</sub>（对比）</span><span id="mVar">1.000</span></div>
+      <div class="stat"><span>不确定性削减 1 − σ²<sub>y|x</sub>/σ²<sub>y</sub> = ρ²</span><span><b class="badge" id="redu" style="background:rgba(123,216,143,.18);color:var(--green)">49%</b></span></div>
+      <div class="note" style="margin-top:8px">
+        关键三点（§5.3.4）：<b class="y">①</b> 条件均值是 x₀ 的<b>线性函数</b>——它就是把 y 对 x 做最小二乘<b>回归</b>的那条线（图中橙色虚线），对高斯回归是<b>精确</b>而非近似。<b class="y">②</b> 条件方差 <code>σ²<sub>y</sub>(1−ρ²)</code> <b>比边缘方差小</b>（观测 x 后不确定性只减不增，削减比例 = ρ²）。<b class="y">③</b> 条件方差<b>不依赖 x₀</b>——拖 x₀ 时切片高斯左右平移、胖瘦不变，这是高斯独有的奢侈。
+      </div>
+    </div>
+
+    <h2>怎么玩（对照课文）</h2>
+    <div class="note">
+      <p><b>1. ρ → 0：</b>椭圆变正、主轴对齐坐标轴、回归线变平、条件方差 = 边缘方差（削减 0%）；此时 Σ 与 Λ 都成对角——<b>不相关 ⇔ 独立</b>（高斯独有，§5.2）。</p>
+      <p><b>2. ρ → ±0.95：</b>椭圆压成细针、点几乎落在回归线上；条件方差骤降（削减→100%），<b class="r">Λ 的非对角元爆炸增大</b>——强直接依赖。det Σ→0，逼近<b>奇异</b>（求逆要炸，§5.4.4 的正则化由此而来）。</p>
+      <p><b>3. 拖竖直黄杆：</b>切片处的 1D 高斯峰心沿<b class="o">橙色回归线</b>滑动（=条件均值随 x₀ 线性变），但胖瘦不变（=条件方差恒定）。</p>
+      <p><b>4. σx ≠ σy 且 ρ≠0：</b>看主轴方向不再是 45°——主轴是 <b class="c">Σ 的特征向量</b>，半长 ∝ √λ。「瘦椭圆」预设把这点放大。</p>
+      <p><b>5. 「链式 DCA」：</b>切到一个三变量 <code>X₁–X₂–X₃</code> 的链，<code>X₁,X₃</code> 无直接边却协方差非零（间接/假信号），而 <b class="r">Λ₁₃=0</b> 诚实归零——接触预测用 <b class="r">Λ</b> 而非 Σ 的全部要害（§5.4.3）。</p>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const stage=document.getElementById('stage');
+let W=0,H=0, DPR=Math.max(1,window.devicePixelRatio||1);
+function resize(){
+  const r=stage.getBoundingClientRect();
+  W=Math.max(420,r.width); H=Math.max(420,r.height);
+  cv.style.width=W+'px'; cv.style.height=H+'px';
+  cv.width=W*DPR; cv.height=H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0);
+  draw();
+}
+window.addEventListener('resize',resize);
+
+// ---- world <-> screen.  world centered at 0, fixed span so椭圆变化可见 ----
+const WX=5.0; // half-width in world units (x)
+function aspectWY(){ return WX*H/W; } // keep square-ish in world coords
+function sx(x){ return W*0.5 + x/WX*(W*0.46); }
+function sy(y){ const WY=aspectWY(); return H*0.5 - y/WY*(H*0.46); }
+function wx(px){ return (px-W*0.5)/(W*0.46)*WX; }     // screen->world x
+function scaleX(){ return (W*0.46)/WX; }
+function scaleY(){ const WY=aspectWY(); return (H*0.46)/WY; }
+
+// ---- parameters ----
+let p={sx:1.6, sy:1.0, rho:0.7, x0:1.4, n:900};
+
+// ---- samples (stored as standard normals, transformed on the fly) ----
+let z=[]; // array of [z1,z2] iid N(0,1)
+function resample(){
+  z=[]; const N=2500;
+  for(let i=0;i<N;i++) z.push([randn(),randn()]);
+}
+function randn(){
+  let u=0,v=0; while(u===0)u=Math.random(); while(v===0)v=Math.random();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(6.283185307*v);
+}
+// transform standard normal z -> sample with covariance Σ via Cholesky of Σ
+// Σ=[[a,b],[b,c]], a=sx^2, c=sy^2, b=rho*sx*sy
+// L = [[sqrt(a),0],[b/sqrt(a), sqrt(c-b^2/a)]]
+function chol(){
+  const a=p.sx*p.sx, c=p.sy*p.sy, b=p.rho*p.sx*p.sy;
+  const l11=Math.sqrt(a);
+  const l21=b/l11;
+  const l22=Math.sqrt(Math.max(1e-9,c-l21*l21));
+  return [l11,l21,l22];
+}
+
+// ---- math helpers for 2x2 ----
+function covM(){ const a=p.sx*p.sx, c=p.sy*p.sy, b=p.rho*p.sx*p.sy; return [a,b,c]; } //[s00,s01=s10,s11]
+function precM(){ // inverse of Σ
+  const [a,b,c]=covM(); const det=a*c-b*b;
+  return [c/det, -b/det, a/det, det];
+}
+function eigSym(a,b,c){ // eigen of [[a,b],[b,c]]
+  const tr=a+c, d=Math.sqrt(Math.max(0,(a-c)*(a-c)+4*b*b))/2;
+  const l1=tr/2+d, l2=tr/2-d;
+  // eigenvector for l1
+  let vx,vy;
+  if(Math.abs(b)>1e-9){ vx=l1-c; vy=b; }
+  else { if(a>=c){vx=1;vy=0;} else {vx=0;vy=1;} }
+  const nn=Math.hypot(vx,vy)||1; vx/=nn; vy/=nn;
+  return {l1,l2,vx,vy};
+}
+
+// ===================== DCA (three-variable chain) mode =====================
+// separate small demo shown via preset: X1 - X2 - X3 chain.
+// We display its 3x3 Σ and Λ in an overlay; the main plot stays 2D (X1 vs X3).
+let dcaMode=false;
+// precision matrix of a chain X1-X2-X3 (tridiagonal): Λ has zero at (1,3)
+const dcaLambda=[[1.5,-0.8,0],[-0.8,1.6,-0.8],[0,-0.8,1.5]];
+let dcaSigma=null;
+function inv3(M){
+  // 3x3 inverse via adjugate
+  const a=M[0][0],b=M[0][1],c=M[0][2],d=M[1][0],e=M[1][1],f=M[1][2],g=M[2][0],h=M[2][1],i=M[2][2];
+  const A=e*i-f*h, B=-(d*i-f*g), C=d*h-e*g;
+  const det=a*A+b*B+c*C;
+  const D=-(b*i-c*h), E=a*i-c*g, F=-(a*h-b*g);
+  const G=b*f-c*e, Hh=-(a*f-c*d), I=a*e-b*d;
+  return [[A/det,D/det,G/det],[B/det,E/det,Hh/det],[C/det,F/det,I/det]];
+}
+dcaSigma=inv3(dcaLambda);
+
+// ---- drawing ----
+function drawAxes(){
+  ctx.strokeStyle='rgba(255,255,255,0.10)'; ctx.lineWidth=1;
+  ctx.beginPath();
+  ctx.moveTo(sx(-WX),sy(0)); ctx.lineTo(sx(WX),sy(0));
+  ctx.moveTo(sx(0),sy(-aspectWY())); ctx.lineTo(sx(0),sy(aspectWY()));
+  ctx.stroke();
+  // ticks + labels
+  ctx.fillStyle='rgba(154,160,180,0.7)'; ctx.font='11px ui-monospace,monospace';
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  for(let k=-4;k<=4;k++){ if(k===0)continue;
+    ctx.fillStyle='rgba(154,160,180,0.18)';
+    ctx.beginPath(); ctx.moveTo(sx(k),sy(-aspectWY())); ctx.lineTo(sx(k),sy(aspectWY())); ctx.stroke();
+    ctx.fillStyle='rgba(154,160,180,0.6)'; ctx.fillText(k, sx(k), sy(0)+4);
+  }
+  ctx.textAlign='right';
+  for(let k=-3;k<=3;k++){ if(k===0)continue;
+    ctx.fillStyle='rgba(154,160,180,0.6)'; ctx.fillText(k, sx(0)-5, sy(k)-6);
+  }
+  ctx.fillStyle='var(--dim)'; ctx.font='13px system-ui';
+  ctx.fillStyle='rgba(200,205,222,0.8)';
+  ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+  ctx.fillText('x', sx(WX)-16, sy(0)-8);
+  ctx.fillText('y', sx(0)+8, sy(aspectWY())+16);
+}
+
+function drawSamples(){
+  const [l11,l21,l22]=chol();
+  ctx.fillStyle='rgba(34,199,214,0.50)';
+  const N=Math.round(p.n);
+  for(let i=0;i<N;i++){
+    const z1=z[i][0], z2=z[i][1];
+    const x=l11*z1, y=l21*z1+l22*z2;
+    const X=sx(x), Y=sy(y);
+    if(X<0||X>W||Y<0||Y>H)continue;
+    ctx.beginPath(); ctx.arc(X,Y,1.6,0,6.2832); ctx.fill();
+  }
+}
+
+function drawEllipses(){
+  // density contours: (x-mu)^T Σ^{-1} (x-mu) = k^2  for k=1,2,3
+  // parametrize via Σ^{1/2} = L (cholesky): point = k*L*[cosθ;sinθ]
+  const [l11,l21,l22]=chol();
+  const ks=[1,2,3];
+  ks.forEach((k,idx)=>{
+    ctx.beginPath();
+    for(let t=0;t<=64;t++){
+      const a=t/64*6.2832, ct=Math.cos(a), st=Math.sin(a);
+      const x=k*(l11*ct);
+      const y=k*(l21*ct+l22*st);
+      const X=sx(x), Y=sy(y);
+      t?ctx.lineTo(X,Y):ctx.moveTo(X,Y);
+    }
+    ctx.closePath();
+    ctx.strokeStyle=`rgba(245,166,35,${0.95-idx*0.22})`;
+    ctx.lineWidth= idx===0?2.2:1.4;
+    ctx.stroke();
+  });
+}
+
+function drawAxesEllipse(){
+  // principal axes = eigenvectors of Σ, half-length = sqrt(lambda)*k (use k=2 for visibility)
+  const [a,b,c]=covM();
+  const {l1,l2,vx,vy}=eigSym(a,b,c);
+  const K=2;
+  // major axis along (vx,vy), length sqrt(l1)*K; minor perpendicular
+  const ax1=Math.sqrt(Math.max(0,l1))*K, ax2=Math.sqrt(Math.max(0,l2))*K;
+  ctx.lineWidth=2;
+  // major
+  ctx.strokeStyle='rgba(34,199,214,0.95)';
+  ctx.beginPath();
+  ctx.moveTo(sx(-vx*ax1),sy(-vy*ax1)); ctx.lineTo(sx(vx*ax1),sy(vy*ax1)); ctx.stroke();
+  // minor (perpendicular)
+  const px=-vy, py=vx;
+  ctx.strokeStyle='rgba(34,199,214,0.55)';
+  ctx.beginPath();
+  ctx.moveTo(sx(-px*ax2),sy(-py*ax2)); ctx.lineTo(sx(px*ax2),sy(py*ax2)); ctx.stroke();
+  // arrow heads / dots
+  ctx.fillStyle='rgba(34,199,214,0.95)';
+  ctx.beginPath(); ctx.arc(sx(vx*ax1),sy(vy*ax1),3.5,0,6.2832); ctx.fill();
+}
+
+function drawRegressionLine(){
+  // E[y|x] = slope * x, slope = rho*sy/sx  (mu=0)
+  const slope = p.rho*p.sy/p.sx;
+  ctx.strokeStyle='rgba(245,166,35,0.75)';
+  ctx.lineWidth=1.6; ctx.setLineDash([6,5]);
+  ctx.beginPath();
+  const xa=-WX, xb=WX;
+  ctx.moveTo(sx(xa),sy(slope*xa));
+  ctx.lineTo(sx(xb),sy(slope*xb));
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawConditional(){
+  // vertical slider line at x=x0 and the 1D conditional gaussian curve drawn vertically
+  const x0=p.x0;
+  const muc = p.rho*(p.sy/p.sx)*x0;
+  const varc = p.sy*p.sy*(1-p.rho*p.rho);
+  const sdc = Math.sqrt(Math.max(1e-9,varc));
+  const Xline=sx(x0);
+
+  // shaded vertical strip
+  ctx.fillStyle='rgba(255,209,102,0.06)';
+  ctx.fillRect(Xline-1,0,2,H);
+  // the vertical slice line
+  ctx.strokeStyle='rgba(255,209,102,0.95)'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(Xline,0); ctx.lineTo(Xline,H); ctx.stroke();
+
+  // handle at top
+  ctx.fillStyle='rgba(255,209,102,0.95)';
+  ctx.beginPath();
+  ctx.roundRect ? ctx.roundRect(Xline-9,8,18,16,4) : ctx.rect(Xline-9,8,18,16);
+  ctx.fill();
+  ctx.fillStyle='#0f1117'; ctx.font='bold 10px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('x₀',Xline,16);
+
+  // conditional gaussian curve: plotted as horizontal density sticking out to the RIGHT of the slice line
+  // density f(y) = N(muc, varc).  We draw curve x_screen = Xline + amp * f_normalized(y)
+  const amp = scaleX()*0.9; // how far the bump extends in screen px (relative to one world unit of density peak)
+  const peak = 1/(sdc*Math.sqrt(6.2832));
+  ctx.beginPath();
+  const WY=aspectWY();
+  for(let i=0;i<=80;i++){
+    const y=-WY + i/80*2*WY;
+    const f=Math.exp(-0.5*(y-muc)*(y-muc)/varc)/(sdc*Math.sqrt(6.2832));
+    const X=Xline + (f/peak)*amp*0.85;
+    const Y=sy(y);
+    i?ctx.lineTo(X,Y):ctx.moveTo(X,Y);
+  }
+  ctx.strokeStyle='rgba(255,209,102,0.95)'; ctx.lineWidth=2; ctx.stroke();
+  // fill under
+  ctx.lineTo(Xline,sy(-WY)); ctx.lineTo(Xline,sy(WY)); ctx.closePath();
+  ctx.fillStyle='rgba(255,209,102,0.12)'; ctx.fill();
+
+  // mark conditional mean on the slice (on regression line) and ±1σ band
+  const Ymu=sy(muc);
+  ctx.fillStyle='rgba(245,166,35,0.95)';
+  ctx.beginPath(); ctx.arc(Xline,Ymu,4.5,0,6.2832); ctx.fill();
+  ctx.strokeStyle='#0f1117'; ctx.lineWidth=1.2; ctx.stroke();
+  // ±1σ ticks
+  ctx.strokeStyle='rgba(255,209,102,0.6)'; ctx.lineWidth=1.5;
+  [muc+sdc,muc-sdc].forEach(yy=>{
+    ctx.beginPath(); ctx.moveTo(Xline-6,sy(yy)); ctx.lineTo(Xline+6,sy(yy)); ctx.stroke();
+  });
+
+  // small label near bump
+  ctx.fillStyle='rgba(255,209,102,0.95)'; ctx.font='12px system-ui';
+  ctx.textAlign='left'; ctx.textBaseline='bottom';
+  ctx.fillText('N(μ_{y|x}, σ²_{y|x})', Math.min(W-150,Xline+8), Ymu-10);
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  drawAxes();
+  drawEllipses();
+  drawSamples();
+  drawRegressionLine();
+  drawAxesEllipse();
+  drawConditional();
+}
+
+// ---- readouts ----
+function fmt(v,d=2){ if(!isFinite(v))return '—'; return (v>=0?' ':'')+v.toFixed(d); }
+function fmtS(v,d=2){ return v.toFixed(d); } // signed shown plainly
+function updateMatrices(){
+  const [a,b,c]=covM();
+  set('s00',a.toFixed(2)); set('s11',c.toFixed(2));
+  set('s01',signed(b)); set('s10',signed(b));
+  const [la,lb,lc,det]=precM();
+  set('l00',la.toFixed(2)); set('l11',lc.toFixed(2));
+  set('l01',signed(lb)); set('l10',signed(lb));
+  set('detS', (a*c-b*b).toFixed(3));
+  // partial correlation = -Λ12/sqrt(Λ11 Λ22) = rho  (for 2-var)
+  const pc = -lb/Math.sqrt(la*lc);
+  set('pcor', signed(pc,2));
+  const e=eigSym(a,b,c);
+  set('eig', e.l1.toFixed(2)+', '+e.l2.toFixed(2));
+}
+function updateConditional(){
+  const x0=p.x0;
+  const slope=p.rho*(p.sy/p.sx);
+  const muc=slope*x0;
+  const varc=p.sy*p.sy*(1-p.rho*p.rho);
+  const sdc=Math.sqrt(Math.max(0,varc));
+  set('cMu', signed(muc,2)); set('cVar', varc.toFixed(2));
+  set('cMu2', signed(muc,3)); set('cSlope', signed(slope,3));
+  set('cVar2', varc.toFixed(3)); set('cSd', sdc.toFixed(3));
+  set('mVar', (p.sy*p.sy).toFixed(3));
+  const redu=p.rho*p.rho;
+  set('redu', (redu*100).toFixed(0)+'%');
+}
+function signed(v,d=2){ if(!isFinite(v))return '—'; return (v<0?'−':'')+Math.abs(v).toFixed(d); }
+function set(id,t){ const el=document.getElementById(id); if(el)el.textContent=t; }
+
+function updateAll(){ updateMatrices(); updateConditional(); draw(); }
+
+// ---- bind sliders ----
+function bind(id,vid,key,fmtf,after){
+  const el=document.getElementById(id), v=document.getElementById(vid);
+  const upd=()=>{ p[key]=parseFloat(el.value); v.textContent=fmtf(p[key]); if(after)after(); updateAll(); };
+  el.addEventListener('input',upd); v.textContent=fmtf(p[key]);
+}
+bind('sx','sxV','sx',v=>v.toFixed(2));
+bind('sy','syV','sy',v=>v.toFixed(2));
+bind('rho','rhoV','rho',v=>signed(v,2));
+bind('x0','x0V','x0',v=>signed(v,2));
+bind('ns','nsV','n',v=>Math.round(v));
+
+// ---- presets ----
+function applyPreset(name){
+  if(name==='resample'){ resample(); updateAll(); return; }
+  if(name==='dca'){ showDCA(); return; }
+  const m={
+    iso:{sx:1.4,sy:1.4,rho:0.0},
+    strong:{sx:1.5,sy:1.2,rho:0.9},
+    neg:{sx:1.6,sy:1.1,rho:-0.8},
+    thin:{sx:2.4,sy:0.5,rho:0.6},
+  }[name];
+  if(!m)return;
+  Object.assign(p,m);
+  syncSliders();
+  updateAll();
+}
+function syncSliders(){
+  document.getElementById('sx').value=p.sx; document.getElementById('sxV').textContent=p.sx.toFixed(2);
+  document.getElementById('sy').value=p.sy; document.getElementById('syV').textContent=p.sy.toFixed(2);
+  document.getElementById('rho').value=p.rho; document.getElementById('rhoV').textContent=signed(p.rho,2);
+}
+document.querySelectorAll('[data-p]').forEach(b=>b.addEventListener('click',()=>applyPreset(b.dataset.p)));
+
+// ---- DCA overlay (three-variable chain): pop a modal-ish info ----
+function showDCA(){
+  const S=dcaSigma, L=dcaLambda;
+  const r3=(M)=>M.map(row=>row.map(v=>Math.abs(v)<1e-9?'  0.00':(v<0?'−':' ')+Math.abs(v).toFixed(2)).join('  ')).join('\n');
+  const msg =
+"链式高斯图模型 X₁ — X₂ — X₃（X₁,X₃ 无直接边）\n\n"+
+"精度矩阵 Λ（物理 / 直接耦合，稀疏）：\n"+ r3(L) +
+"\n  ← 注意 Λ₁₃ = Λ₃₁ = 0：给定 X₂ 后 X₁⊥X₃\n\n"+
+"协方差 Σ = Λ⁻¹（表观 / 总相关，稠密）：\n"+ r3(S) +
+"\n  ← 注意 Σ₁₃ ≈ "+S[0][2].toFixed(2)+" ≠ 0：相关沿 X₁→X₂→X₃ 传递过去了（假信号）\n\n"+
+"结论：只看协方差会把「不接触却间接相关」的 (1,3) 当成接触；\n"+
+"只有看精度矩阵 Λ₁₃=0 才诚实。这就是 DCA / PSICOV 用 Σ⁻¹\n"+
+"（而非 Σ 或相关矩阵）做接触预测的全部要害（§5.4.3）。";
+  alert(msg);
+}
+
+// ---- drag the slice line directly on canvas ----
+let dragging=false;
+function setX0FromScreen(clientX){
+  const r=cv.getBoundingClientRect();
+  const px=clientX-r.left;
+  let x=wx(px);
+  x=Math.max(-4.2,Math.min(4.2,x));
+  p.x0=x;
+  document.getElementById('x0').value=x;
+  document.getElementById('x0V').textContent=signed(x,2);
+  updateAll();
+}
+cv.addEventListener('pointerdown',e=>{
+  const r=cv.getBoundingClientRect();
+  const Xline=sx(p.x0);
+  if(Math.abs((e.clientX-r.left)-Xline)<18){ dragging=true; cv.setPointerCapture(e.pointerId); setX0FromScreen(e.clientX); }
+});
+cv.addEventListener('pointermove',e=>{ if(dragging) setX0FromScreen(e.clientX); });
+cv.addEventListener('pointerup',e=>{ dragging=false; });
+cv.addEventListener('pointercancel',e=>{ dragging=false; });
+cv.style.cursor='ew-resize';
+
+// ---- init ----
+resample();
+resize();
+updateAll();
+</script>
+</body>
+</html>

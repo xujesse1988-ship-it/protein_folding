@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>大数定律 与 中心极限定理 —— 样本均值的收敛与高斯化 · 配套第 6 章</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a24; --panel2:#1f2330; --line:#2b3040;
+    --text:#e7e9f0; --dim:#9aa0b4;
+    --theory:#f5a623;   /* 理论：高斯曲线 / 真均值 μ */
+    --sample:#22c7d6;   /* 经验：样本均值 / 直方图 */
+    --accent:#ffd166;
+    --red:#ef6b73;
+    --green:#7bd88f;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;}
+  header{padding:13px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{margin:0;font-size:18px;letter-spacing:.3px}
+  header p{margin:4px 0 0;color:var(--dim);font-size:13px}
+  header p b{color:#fff}
+  header .t{color:var(--theory)} header .s{color:var(--sample)}
+  .wrap{display:flex;height:calc(100% - 60px);min-height:0}
+  .stage{position:relative;flex:1 1 auto;min-width:0;overflow-y:auto;
+    background:radial-gradient(circle at 50% 30%,#161a26 0%,#0d0f15 80%);padding:0}
+  .stagepad{padding:16px 18px 28px}
+  .canvaswrap{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:14px}
+  .canvaswrap h3{margin:2px 4px 8px;font-size:13.5px;color:#fff;font-weight:600}
+  .canvaswrap h3 .tag{color:var(--dim);font-weight:400;font-size:12px}
+  canvas{display:block;width:100%}
+  .caption{color:var(--dim);font-size:12px;margin:4px 4px 0;line-height:1.6}
+  .caption b{color:#e7e9f0}
+  .legend{font-size:12.5px;color:var(--dim);margin:0 4px 8px;line-height:1.9}
+  .legend .bar{display:inline-block;width:16px;height:9px;border-radius:3px;margin-right:5px;vertical-align:middle}
+  .legend .ln{display:inline-block;width:18px;height:0;border-top:3px solid;margin-right:5px;vertical-align:middle}
+  .panel{flex:0 0 392px;max-width:50%;overflow-y:auto;border-left:1px solid var(--line);background:var(--panel);padding:16px}
+  .panel h2{font-size:14px;margin:18px 0 8px;color:#fff}
+  .panel h2:first-child{margin-top:0}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+  button{background:#262b3a;color:var(--text);border:1px solid var(--line);border-radius:8px;
+    padding:7px 11px;font-size:13px;cursor:pointer}
+  button:hover{filter:brightness(1.14)}
+  button.on{border-color:var(--sample);color:#fff;background:#1d3640}
+  .grid{display:flex;flex-wrap:wrap;gap:6px}
+  .grid button{flex:1 1 30%;font-size:12px;padding:7px 4px}
+  .grid button.on{border-color:var(--accent);color:#fff;background:#33301d}
+  .row{display:flex;align-items:center;gap:10px;margin:9px 0}
+  .row label{flex:0 0 116px;font-weight:600;font-size:13px}
+  .row label small{display:block;color:var(--dim);font-weight:400;font-size:11px}
+  input[type=range]{flex:1 1 auto;accent-color:var(--sample);min-width:0}
+  .val{flex:0 0 54px;text-align:right;font-variant-numeric:tabular-nums;color:var(--accent);font-size:13px}
+  .stat{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px dashed #2b3040}
+  .stat:last-child{border-bottom:none}
+  .stat span:last-child{color:#fff;font-variant-numeric:tabular-nums}
+  .stat .th{color:var(--theory)} .stat .sm{color:var(--sample)}
+  .note{font-size:12.5px;color:var(--dim);line-height:1.8}
+  .note b{color:#e7e9f0}
+  .note .t{color:var(--theory)} .note .s{color:var(--sample)} .note .g{color:var(--green)} .note .r{color:var(--red)}
+  code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#cdd6f4}
+  .btnrow{display:flex;gap:8px}
+  .btnrow button{flex:1 1 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>大数定律 &amp; 中心极限定理：<span class="s">样本均值</span>如何收敛、又如何<span class="t">高斯化</span></h1>
+  <p>配套《概率与统计深度入门》<b>第 6 章</b>。选一个<b>哪怕奇形怪状</b>的基分布——看 ① <b>LLN</b>：样本均值 <span class="s">X̄ₙ</span> 随 n 收敛到真均值 <span class="t">μ</span>；② <b>CLT</b>：把「抽 n 个求均值」重复成千上万次，这些均值的直方图<b>无论基分布长什么样都趋于<span class="t">高斯</span></b> N(μ, σ²/n)。</p>
+</header>
+<div class="wrap">
+  <div class="stage">
+   <div class="stagepad">
+
+    <div class="canvaswrap">
+      <h3>基分布 <span class="tag">base distribution —— 你正在采样的「原料」，它可以一点都不像高斯</span></h3>
+      <div class="legend">
+        <span class="bar" style="background:rgba(34,199,214,.45)"></span>4 万个基分布样本的归一化直方图 &nbsp;
+        <span class="ln" style="border-color:var(--green)"></span>真均值 μ
+      </div>
+      <canvas id="cvBase" height="180"></canvas>
+      <div class="caption" id="capBase">横轴 = 取值，纵轴 = 密度/概率。注意它的形状——CLT 的魔力正是「让这团乱麻的<b>均值</b>变成钟形」。</div>
+    </div>
+
+    <div class="canvaswrap">
+      <h3>① 大数定律 LLN <span class="tag">—— 样本均值 X̄ₙ 随 n 收敛到 μ；阴影是 ±2σ/√n 的 1/√n 漏斗</span></h3>
+      <div class="legend">
+        <span class="ln" style="border-color:var(--sample)"></span>运行样本均值 X̄ₙ &nbsp;
+        <span class="ln" style="border-color:var(--green)"></span>真均值 μ &nbsp;
+        <span class="bar" style="background:rgba(245,166,35,.16)"></span>±2σ/√n 收敛漏斗
+      </div>
+      <canvas id="cvLLN" height="250"></canvas>
+      <div class="caption">x 轴为对数刻度（n 从 1 到上万）。早期 X̄ₙ 抖得厉害，随 n 增大被漏斗夹向 μ——<b>抖动以 1/√n 的速度缩小</b>，这正是「标准误 = σ/√n」的来历。</div>
+    </div>
+
+    <div class="canvaswrap">
+      <h3>② 中心极限定理 CLT <span class="tag">—— 大量「size-n 样本均值」的直方图 vs 理论高斯 N(μ, σ²/n)</span></h3>
+      <div class="legend">
+        <span class="bar" style="background:rgba(34,199,214,.5)"></span>均值的经验直方图（密度归一） &nbsp;
+        <span class="ln" style="border-color:var(--theory)"></span>理论高斯 N(μ, σ²/n) &nbsp;
+        <span class="ln" style="border-color:var(--green)"></span>μ
+      </div>
+      <canvas id="cvCLT" height="300"></canvas>
+      <div class="caption">每做一次「抽 <b>n</b> 个样本、求平均」就往直方图里投一票。试验越多直方图越平滑、越贴合<span class="t">橙色高斯</span>；把 <b>n</b> 拉大，钟形会<b>变窄</b>（宽度 ∝ 1/√n）<b>且对偏态基分布越来越对称</b>（Berry–Esseen）。</div>
+    </div>
+
+   </div>
+  </div>
+
+  <div class="panel">
+    <h2>① 选基分布</h2>
+    <div class="card">
+      <div class="grid" id="bases"></div>
+      <div class="note" id="baseDesc" style="margin-top:9px"></div>
+      <div class="stat" style="margin-top:8px"><span>真均值 <span class="th">μ</span></span><span id="rdMu">—</span></div>
+      <div class="stat"><span>真方差 <span class="th">σ²</span>（标准差 σ）</span><span id="rdVar">—</span></div>
+    </div>
+
+    <h2>② 大数定律：把样本一个个喂进来</h2>
+    <div class="card">
+      <div class="btnrow">
+        <button id="lln1">+1</button>
+        <button id="lln100">+100</button>
+        <button id="llnAuto">▶ 自动跑</button>
+        <button id="llnReset">重置</button>
+      </div>
+      <div class="stat" style="margin-top:10px"><span>已喂入样本数 n</span><span id="rdN">0</span></div>
+      <div class="stat"><span>当前样本均值 <span class="sm">X̄ₙ</span></span><span id="rdXbar">—</span></div>
+      <div class="stat"><span>偏差 |X̄ₙ − μ|</span><span id="rdDev">—</span></div>
+      <div class="stat"><span>理论标准误 σ/√n</span><span id="rdSE">—</span></div>
+      <p class="note" style="margin-top:8px">观察：偏差大致被 <span class="t">σ/√n</span> 夹住——要把误差减半，样本量得翻到 <b>4 倍</b>。这就是统计学「收益递减」的根。</p>
+    </div>
+
+    <h2>③ 中心极限定理：均值的抽样分布</h2>
+    <div class="card">
+      <div class="row">
+        <label>每次样本量 n<small>一次试验抽 n 个再求均值</small></label>
+        <input id="sN" type="range" min="1" max="200" step="1" value="2">
+        <span class="val" id="vN">2</span>
+      </div>
+      <div class="btnrow">
+        <button id="clt1">+1 次试验</button>
+        <button id="clt500">+500 次</button>
+        <button id="cltAuto">▶ 自动跑</button>
+        <button id="cltReset">清空直方图</button>
+      </div>
+      <div class="stat" style="margin-top:10px"><span>已积累试验数</span><span id="rdTrials">0</span></div>
+      <div class="stat"><span>均值的<span class="sm">经验</span>均值 / <span class="th">理论 μ</span></span><span id="rdMeanCmp">—</span></div>
+      <div class="stat"><span>均值的<span class="sm">经验</span>方差 / <span class="th">理论 σ²/n</span></span><span id="rdVarCmp">—</span></div>
+      <p class="note" style="margin-top:8px">把 n 设成 1：直方图就是基分布本身（再偏也偏）。把 n 调到 2、5、30……同一团原料，<b>均值</b>却一步步塑成<span class="t">同一口钟</span>——这就是 CLT。</p>
+    </div>
+
+    <h2>这屏在讲什么</h2>
+    <div class="card">
+      <p class="note" id="story"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============================ 工具 ============================ */
+const TAU = Math.PI*2;
+function randn(){ // Box–Muller 标准高斯
+  let u=0,v=0;
+  while(u===0) u=Math.random();
+  while(v===0) v=Math.random();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(TAU*v);
+}
+function fitCanvas(cv){
+  const dpr = Math.max(1, Math.min(2, window.devicePixelRatio||1));
+  const cssW = cv.clientWidth || cv.parentElement.clientWidth || 600;
+  const cssH = parseInt(cv.getAttribute('height'),10) || 200;
+  cv.width = Math.round(cssW*dpr);
+  cv.height = Math.round(cssH*dpr);
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {ctx, W:cssW, H:cssH};
+}
+function fmt(x, d=3){ if(!isFinite(x)) return '—'; return x.toFixed(d); }
+
+/* ============================ 基分布 ============================ */
+// 每个基分布：sample() 抽一个值；mu, v2 解析均值/方差；discrete 决定画柱还是曲线
+const BASES = {
+  bern: {
+    label:'伯努利(0.1)', sub:'Bernoulli p=0.1 —— 极偏：90% 是 0、10% 是 1',
+    sample:()=> Math.random()<0.1?1:0, mu:0.1, v2:0.1*0.9, discrete:true,
+  },
+  dice: {
+    label:'掷骰子', sub:'离散均匀 1–6 —— 六根等高的柱，毫无钟形',
+    sample:()=> (Math.floor(Math.random()*6)+1), mu:3.5, v2:35/12, discrete:true,
+  },
+  unif: {
+    label:'均匀(0,1)', sub:'Uniform(0,1) —— 平台一块，谈不上「峰」',
+    sample:()=> Math.random(), mu:0.5, v2:1/12, discrete:false,
+  },
+  expo: {
+    label:'指数(1)', sub:'Exponential λ=1 —— 强右偏、长尾；小 n 时均值也偏',
+    sample:()=> -Math.log(1-Math.random()), mu:1, v2:1, discrete:false,
+  },
+  bimod: {
+    label:'双峰混合', sub:'½·N(−2,0.5²)+½·N(+2,0.5²) —— 两座驼峰，正中间几乎没质量',
+    sample:()=>{ const c = Math.random()<0.5?-2:2; return c + 0.5*randn(); }, mu:0, v2:4.25, discrete:false,
+  },
+  lognorm: {
+    label:'对数正态', sub:'LogNormal(0,1) —— 重尾、偏度大，CLT 收敛最慢的反面教材',
+    sample:()=> Math.exp(randn()), mu:Math.exp(0.5), v2:(Math.E-1)*Math.E, discrete:false,
+  },
+};
+
+/* ============================ 全局状态 ============================ */
+let baseKey = 'expo';
+let base = BASES[baseKey];
+
+// 基分布形状（用一大把样本的直方图画）
+let baseHist = null; // {edges, dens, lo, hi, discrete, vals?}
+function buildBaseHist(){
+  const B = base, M = 40000;
+  if(B.discrete){
+    const counts = new Map();
+    let lo=Infinity, hi=-Infinity;
+    for(let i=0;i<M;i++){ const x=B.sample(); counts.set(x,(counts.get(x)||0)+1); if(x<lo)lo=x; if(x>hi)hi=x; }
+    const vals=[]; for(let k=Math.round(lo);k<=Math.round(hi);k++){ vals.push({x:k, p:(counts.get(k)||0)/M}); }
+    baseHist={discrete:true, vals, lo:Math.round(lo)-0.5, hi:Math.round(hi)+0.5};
+  } else {
+    const sd=Math.sqrt(B.v2);
+    let lo=B.mu-4*sd, hi=B.mu+4*sd;
+    if(baseKey==='expo'){ lo=0; hi=6; }
+    if(baseKey==='lognorm'){ lo=0; hi=8; }
+    const nb=64, dens=new Array(nb).fill(0), bw=(hi-lo)/nb;
+    let inside=0;
+    for(let i=0;i<M;i++){ const x=B.sample(); if(x>=lo&&x<hi){ dens[Math.floor((x-lo)/bw)]++; inside++; } }
+    for(let i=0;i<nb;i++) dens[i] = dens[i]/(M*bw);
+    baseHist={discrete:false, dens, lo, hi, bw, nb};
+  }
+}
+
+// LLN 状态
+const lln = { n:0, sum:0, mean:NaN, pts:[], auto:false, max:20000 };
+function llnReset(){ lln.n=0; lln.sum=0; lln.mean=NaN; lln.pts.length=0; }
+function llnAdd(k){
+  for(let i=0;i<k && lln.n<lln.max;i++){
+    lln.sum += base.sample(); lln.n++; lln.mean = lln.sum/lln.n;
+    // 稀疏存储：n<=200 全存，之后约每 ~1% 存一个，控制点数
+    if(lln.n<=200 || lln.n % Math.max(1, Math.floor(lln.n*0.02))===0){
+      lln.pts.push({n:lln.n, m:lln.mean});
+    }
+  }
+  if(lln.n>=lln.max) lln.auto=false;
+}
+
+// CLT 状态
+const clt = { n:2, trials:0, sum:0, sum2:0, bins:null, lo:0, hi:1, nb:61, bw:1, auto:false, max:80000 };
+function cltRangeForN(){
+  const sd = Math.sqrt(base.v2 / clt.n);
+  clt.lo = base.mu - 4.6*sd;
+  clt.hi = base.mu + 4.6*sd;
+  clt.bw = (clt.hi-clt.lo)/clt.nb;
+  clt.bins = new Array(clt.nb).fill(0);
+}
+function cltReset(){ clt.trials=0; clt.sum=0; clt.sum2=0; cltRangeForN(); }
+function cltAdd(k){
+  for(let t=0;t<k && clt.trials<clt.max;t++){
+    let s=0; for(let i=0;i<clt.n;i++) s+=base.sample();
+    const m=s/clt.n;
+    clt.trials++; clt.sum+=m; clt.sum2+=m*m;
+    let bi=Math.floor((m-clt.lo)/clt.bw);
+    if(bi<0)bi=0; if(bi>=clt.nb)bi=clt.nb-1;
+    clt.bins[bi]++;
+  }
+  if(clt.trials>=clt.max) clt.auto=false;
+}
+
+/* ============================ 绘图 ============================ */
+function axis(ctx, x0,y0,x1,y1){ ctx.strokeStyle='#39405a'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke(); }
+
+function drawBase(){
+  const {ctx,W,H}=fitCanvas(cvBase);
+  ctx.clearRect(0,0,W,H);
+  const padL=44,padR=14,padT=10,padB=24;
+  const x0=padL,x1=W-padR,y0=H-padB,y1=padT;
+  const lo=baseHist.lo, hi=baseHist.hi;
+  const X = v => x0 + (v-lo)/(hi-lo)*(x1-x0);
+  let dmax=0;
+  if(baseHist.discrete){ baseHist.vals.forEach(v=>{ if(v.p>dmax)dmax=v.p; }); }
+  else { baseHist.dens.forEach(d=>{ if(d>dmax)dmax=d; }); }
+  dmax = dmax>0?dmax*1.12:1;
+  const Y = d => y0 - d/dmax*(y0-y1);
+  // 轴
+  axis(ctx,x0,y0,x1,y0);
+  // 柱
+  ctx.fillStyle='rgba(34,199,214,.45)'; ctx.strokeStyle='rgba(34,199,214,.85)'; ctx.lineWidth=1;
+  if(baseHist.discrete){
+    const halfw = Math.min(26,(x1-x0)/(baseHist.vals.length)*0.42);
+    baseHist.vals.forEach(v=>{ const cx=X(v.x), yy=Y(v.p); ctx.fillRect(cx-halfw,yy,halfw*2,y0-yy); ctx.strokeRect(cx-halfw,yy,halfw*2,y0-yy); });
+  } else {
+    for(let i=0;i<baseHist.nb;i++){ const xa=X(baseHist.lo+i*baseHist.bw), xb=X(baseHist.lo+(i+1)*baseHist.bw), yy=Y(baseHist.dens[i]); ctx.fillRect(xa,yy,Math.max(1,xb-xa-0.5),y0-yy); }
+  }
+  // μ 线
+  const xm=X(base.mu);
+  ctx.strokeStyle='#7bd88f'; ctx.lineWidth=2; ctx.setLineDash([5,4]);
+  ctx.beginPath(); ctx.moveTo(xm,y1); ctx.lineTo(xm,y0); ctx.stroke(); ctx.setLineDash([]);
+  // x 刻度
+  ctx.fillStyle='#9aa0b4'; ctx.font='11px system-ui'; ctx.textAlign='center';
+  for(let t=0;t<=4;t++){ const v=lo+(hi-lo)*t/4; ctx.fillText(fmt(v,1), X(v), y0+15); }
+  ctx.textAlign='left'; ctx.fillStyle='#7bd88f'; ctx.fillText('μ='+fmt(base.mu,2), Math.min(xm+5,x1-60), y1+11);
+}
+
+function drawLLN(){
+  const {ctx,W,H}=fitCanvas(cvLLN);
+  ctx.clearRect(0,0,W,H);
+  const padL=46,padR=14,padT=12,padB=26;
+  const x0=padL,x1=W-padR,y0=H-padB,y1=padT;
+  const sd=Math.sqrt(base.v2), mu=base.mu;
+  const nmax=Math.max(100, lln.n);
+  const lx = n => Math.log10(Math.max(1,n));
+  const X = n => x0 + lx(n)/lx(nmax)*(x1-x0);
+  // y 范围：μ ± 3.2σ（够容纳早期抖动）
+  const yspan=3.2*sd || 1;
+  const ylo=mu-yspan, yhi=mu+yspan;
+  const Y = v => y0 - (v-ylo)/(yhi-ylo)*(y0-y1);
+  // 网格 + 横轴刻度（10 的幂）
+  ctx.strokeStyle='#222838'; ctx.lineWidth=1; ctx.fillStyle='#9aa0b4'; ctx.font='11px system-ui'; ctx.textAlign='center';
+  for(let p=0;p<=Math.ceil(lx(nmax));p++){ const xv=X(Math.pow(10,p)); ctx.beginPath(); ctx.moveTo(xv,y1); ctx.lineTo(xv,y0); ctx.stroke(); ctx.fillText('10'+['⁰','¹','²','³','⁴','⁵'][p], xv, y0+15); }
+  // ±2σ/√n 漏斗
+  ctx.fillStyle='rgba(245,166,35,.16)';
+  ctx.beginPath();
+  let first=true;
+  for(let n=1;n<=nmax;n*= (n<20?1.3:1.18)){ const nn=Math.max(1,Math.round(n)); const yv=Y(mu+2*sd/Math.sqrt(nn)); if(first){ctx.moveTo(X(nn),yv);first=false;} else ctx.lineTo(X(nn),yv); }
+  for(let n=nmax;n>=1;n/= (n<20?1.3:1.18)){ const nn=Math.max(1,Math.round(n)); ctx.lineTo(X(nn),Y(mu-2*sd/Math.sqrt(nn))); }
+  ctx.closePath(); ctx.fill();
+  // μ 线
+  ctx.strokeStyle='#7bd88f'; ctx.lineWidth=1.6; ctx.setLineDash([6,4]); ctx.beginPath(); ctx.moveTo(x0,Y(mu)); ctx.lineTo(x1,Y(mu)); ctx.stroke(); ctx.setLineDash([]);
+  // 运行均值轨迹
+  if(lln.pts.length){
+    ctx.strokeStyle='#22c7d6'; ctx.lineWidth=1.8; ctx.beginPath();
+    lln.pts.forEach((p,i)=>{ const xx=X(p.n), yy=Y(Math.max(ylo,Math.min(yhi,p.m))); if(i===0)ctx.moveTo(xx,yy); else ctx.lineTo(xx,yy); });
+    ctx.stroke();
+    const last=lln.pts[lln.pts.length-1];
+    ctx.fillStyle='#22c7d6'; ctx.beginPath(); ctx.arc(X(last.n),Y(Math.max(ylo,Math.min(yhi,last.m))),3.2,0,TAU); ctx.fill();
+  }
+  // y 刻度
+  ctx.fillStyle='#9aa0b4'; ctx.textAlign='right'; ctx.font='11px system-ui';
+  [mu+2*sd,mu+sd,mu,mu-sd,mu-2*sd].forEach(v=>{ ctx.fillText(fmt(v,1),x0-6,Y(v)+4); });
+  ctx.textAlign='left'; ctx.fillStyle='#7bd88f'; ctx.fillText('μ',x1-14,Y(mu)-5);
+}
+
+function drawCLT(){
+  const {ctx,W,H}=fitCanvas(cvCLT);
+  ctx.clearRect(0,0,W,H);
+  const padL=46,padR=14,padT=14,padB=26;
+  const x0=padL,x1=W-padR,y0=H-padB,y1=padT;
+  const lo=clt.lo,hi=clt.hi;
+  const X = v => x0 + (v-lo)/(hi-lo)*(x1-x0);
+  const sdn=Math.sqrt(base.v2/clt.n);
+  const gpeak = 1/(sdn*Math.sqrt(TAU));
+  // 直方图密度
+  let hmax=0, dens=new Array(clt.nb).fill(0);
+  if(clt.trials>0){ for(let i=0;i<clt.nb;i++){ dens[i]=clt.bins[i]/(clt.trials*clt.bw); if(dens[i]>hmax)hmax=dens[i]; } }
+  const dmax=Math.max(hmax, gpeak)*1.14 || 1;
+  const Y = d => y0 - d/dmax*(y0-y1);
+  axis(ctx,x0,y0,x1,y0);
+  // 直方图柱
+  ctx.fillStyle='rgba(34,199,214,.5)';
+  for(let i=0;i<clt.nb;i++){ if(dens[i]<=0)continue; const xa=X(lo+i*clt.bw), xb=X(lo+(i+1)*clt.bw), yy=Y(dens[i]); ctx.fillRect(xa,yy,Math.max(1,xb-xa-0.5),y0-yy); }
+  // 理论高斯
+  ctx.strokeStyle='#f5a623'; ctx.lineWidth=2.4; ctx.beginPath();
+  for(let px=0;px<=240;px++){ const v=lo+(hi-lo)*px/240; const g=gpeak*Math.exp(-((v-base.mu)*(v-base.mu))/(2*sdn*sdn)); const xx=X(v), yy=Y(g); if(px===0)ctx.moveTo(xx,yy); else ctx.lineTo(xx,yy); }
+  ctx.stroke();
+  // μ 线
+  const xm=X(base.mu); ctx.strokeStyle='#7bd88f'; ctx.lineWidth=1.5; ctx.setLineDash([6,4]); ctx.beginPath(); ctx.moveTo(xm,y1); ctx.lineTo(xm,y0); ctx.stroke(); ctx.setLineDash([]);
+  // x 刻度
+  ctx.fillStyle='#9aa0b4'; ctx.font='11px system-ui'; ctx.textAlign='center';
+  for(let t=0;t<=4;t++){ const v=lo+(hi-lo)*t/4; ctx.fillText(fmt(v,2),X(v),y0+15); }
+  ctx.textAlign='left'; ctx.fillStyle='#f5a623';
+  ctx.fillText('N(μ, σ²/n)，σ/√n='+fmt(sdn,3), x0+6, y1+12);
+}
+
+/* ============================ 文案 ============================ */
+function updateStory(){
+  story.innerHTML =
+    '同一团<b>基分布</b>原料，两条定理在管它的<b>均值</b>：<br>'+
+    '· <span class="g">LLN</span> 只保证 X̄ₙ → μ（会到，但没说怎么到）；<br>'+
+    '· <span class="t">CLT</span> 进一步说，途中的<b>涨落</b>放大 √n 后是 <span class="t">N(0, σ²)</span>——于是均值本身 ≈ <span class="t">N(μ, σ²/n)</span>。<br>'+
+    '把基分布换成<b>双峰</b>或<b>指数</b>这种毫不像高斯的，③ 里的钟形照样长出来——这就是为什么误差棒、置信区间、p 值敢默认用高斯。唯一要小心的是<b>对数正态</b>这类重尾/强偏：CLT 仍然成立，但 Berry–Esseen 告诉你 n 要大得多近似才准（把 n 调小看它的左偏残留）。<br>'+
+    '<span class="r">研究连接</span>：对 MD/MCMC 轨迹做时间平均收敛到系综平均，靠的就是这两条；而真正决定精度的不是采样条数，而是<b>有效独立样本数</b>（自相关、系统发育噪声会让真实 n 远小于名义值）。';
+}
+
+/* ============================ 交互装配 ============================ */
+const cvBase=document.getElementById('cvBase'), cvLLN=document.getElementById('cvLLN'), cvCLT=document.getElementById('cvCLT');
+const story=document.getElementById('story');
+
+function renderAll(){ drawBase(); drawLLN(); drawCLT(); refreshReadouts(); }
+function refreshReadouts(){
+  document.getElementById('rdMu').textContent=fmt(base.mu,4);
+  document.getElementById('rdVar').textContent=fmt(base.v2,4)+'  (σ='+fmt(Math.sqrt(base.v2),3)+')';
+  document.getElementById('rdN').textContent=lln.n;
+  document.getElementById('rdXbar').textContent=lln.n? fmt(lln.mean,4):'—';
+  document.getElementById('rdDev').textContent=lln.n? fmt(Math.abs(lln.mean-base.mu),4):'—';
+  document.getElementById('rdSE').textContent=lln.n? fmt(Math.sqrt(base.v2/lln.n),4):'—';
+  document.getElementById('rdTrials').textContent=clt.trials;
+  const em = clt.trials? clt.sum/clt.trials : NaN;
+  const ev = clt.trials>1? (clt.sum2/clt.trials - em*em) : NaN;
+  document.getElementById('rdMeanCmp').textContent=(clt.trials? fmt(em,4):'—')+' / '+fmt(base.mu,4);
+  document.getElementById('rdVarCmp').textContent=(clt.trials>1? fmt(ev,5):'—')+' / '+fmt(base.v2/clt.n,5);
+}
+
+// 基分布按钮
+const basesBox=document.getElementById('bases');
+Object.keys(BASES).forEach(k=>{
+  const b=document.createElement('button'); b.textContent=BASES[k].label; b.dataset.k=k;
+  if(k===baseKey) b.classList.add('on');
+  b.onclick=()=>{ baseKey=k; base=BASES[k]; [...basesBox.children].forEach(c=>c.classList.toggle('on',c.dataset.k===k));
+    document.getElementById('baseDesc').textContent=base.sub;
+    buildBaseHist(); llnReset(); cltReset(); renderAll(); };
+  basesBox.appendChild(b);
+});
+document.getElementById('baseDesc').textContent=base.sub;
+
+// LLN 控件
+document.getElementById('lln1').onclick=()=>{ llnAdd(1); renderAll(); };
+document.getElementById('lln100').onclick=()=>{ llnAdd(100); renderAll(); };
+document.getElementById('llnReset').onclick=()=>{ lln.auto=false; document.getElementById('llnAuto').classList.remove('on'); document.getElementById('llnAuto').textContent='▶ 自动跑'; llnReset(); renderAll(); };
+const llnAutoBtn=document.getElementById('llnAuto');
+llnAutoBtn.onclick=()=>{ lln.auto=!lln.auto; llnAutoBtn.classList.toggle('on',lln.auto); llnAutoBtn.textContent=lln.auto?'⏸ 暂停':'▶ 自动跑'; };
+
+// CLT 控件
+const sN=document.getElementById('sN'), vN=document.getElementById('vN');
+sN.oninput=()=>{ clt.n=+sN.value; vN.textContent=clt.n; cltReset(); renderAll(); };
+document.getElementById('clt1').onclick=()=>{ cltAdd(1); renderAll(); };
+document.getElementById('clt500').onclick=()=>{ cltAdd(500); renderAll(); };
+document.getElementById('cltReset').onclick=()=>{ clt.auto=false; document.getElementById('cltAuto').classList.remove('on'); document.getElementById('cltAuto').textContent='▶ 自动跑'; cltReset(); renderAll(); };
+const cltAutoBtn=document.getElementById('cltAuto');
+cltAutoBtn.onclick=()=>{ clt.auto=!clt.auto; cltAutoBtn.classList.toggle('on',clt.auto); cltAutoBtn.textContent=clt.auto?'⏸ 暂停':'▶ 自动跑'; };
+
+// 动画循环：服务两个 auto
+function loop(){
+  let dirty=false;
+  if(lln.auto){ const step=Math.max(1,Math.floor(lln.n*0.04)); llnAdd(Math.min(step,400)); dirty=true; }
+  if(clt.auto){ cltAdd(300); dirty=true; }
+  if(dirty) renderAll();
+  requestAnimationFrame(loop);
+}
+
+window.addEventListener('resize',()=>renderAll());
+
+// 初始化
+buildBaseHist(); clt.n=+sN.value; cltReset(); updateStory(); renderAll();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

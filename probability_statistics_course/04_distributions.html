@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>分布浏览器 —— pmf/pdf · 抽样直方图 · von Mises 圆周 · 配套第 4 章</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a24; --panel2:#1f2330; --line:#2b3040;
+    --text:#e7e9f0; --dim:#9aa0b4;
+    --theory:#f5a623;   /* 理论 pmf/pdf */
+    --sample:#22c7d6;   /* 抽样直方图 */
+    --accent:#ffd166;
+    --red:#ef6b73;
+    --green:#7bd88f;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;}
+  header{padding:13px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{margin:0;font-size:18px;letter-spacing:.3px}
+  header p{margin:4px 0 0;color:var(--dim);font-size:13px}
+  header p b{color:#fff}
+  header .t{color:var(--theory)} header .s{color:var(--sample)}
+  .wrap{display:flex;height:calc(100% - 60px);min-height:0}
+  .stage{position:relative;flex:1 1 auto;min-width:0;overflow-y:auto;
+    background:radial-gradient(circle at 50% 30%,#161a26 0%,#0d0f15 80%);padding:0}
+  .stagepad{padding:16px 18px 28px}
+  .canvaswrap{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:14px}
+  .canvaswrap.vm{display:none}
+  canvas{display:block;width:100%}
+  .caption{color:var(--dim);font-size:12px;margin:2px 4px 0;line-height:1.6}
+  .caption b{color:#e7e9f0}
+  .legend{font-size:12.5px;color:var(--dim);margin:0 4px 8px;line-height:1.9}
+  .legend .bar{display:inline-block;width:16px;height:9px;border-radius:3px;margin-right:6px;vertical-align:middle}
+  .legend .ln{display:inline-block;width:18px;height:0;border-top:3px solid;margin-right:6px;vertical-align:middle}
+  .panel{flex:0 0 392px;max-width:50%;overflow-y:auto;border-left:1px solid var(--line);background:var(--panel);padding:16px}
+  .panel h2{font-size:14px;margin:18px 0 8px;color:#fff}
+  .panel h2:first-child{margin-top:0}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+  button{background:#262b3a;color:var(--text);border:1px solid var(--line);border-radius:8px;
+    padding:7px 11px;font-size:13px;cursor:pointer}
+  button:hover{filter:brightness(1.14)}
+  button.on{border-color:var(--sample);color:#fff}
+  select{background:#262b3a;color:var(--text);border:1px solid var(--line);border-radius:8px;
+    padding:8px 10px;font-size:14px;width:100%;cursor:pointer}
+  optgroup{color:var(--dim)} option{color:var(--text)}
+  .grid{display:flex;flex-wrap:wrap;gap:6px}
+  .grid button{flex:1 1 28%;font-size:12px;padding:7px 4px}
+  .row{display:flex;align-items:center;gap:10px;margin:9px 0}
+  .row label{flex:0 0 124px;font-weight:600;font-size:13px}
+  .row label small{display:block;color:var(--dim);font-weight:400;font-size:11px}
+  input[type=range]{flex:1 1 auto;accent-color:var(--sample);min-width:0}
+  .val{flex:0 0 50px;text-align:right;font-variant-numeric:tabular-nums;color:var(--accent);font-size:13px}
+  .stat{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px dashed #2b3040}
+  .stat:last-child{border-bottom:none}
+  .stat span:last-child{color:#fff;font-variant-numeric:tabular-nums}
+  .stat .th{color:var(--theory)} .stat .sm{color:var(--sample)}
+  .formula{background:#12151f;border:1px solid var(--line);border-radius:8px;padding:10px 11px;
+    font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;color:#cdd6f4;line-height:1.7;
+    overflow-x:auto;white-space:nowrap}
+  .note{font-size:12.5px;color:var(--dim);line-height:1.8}
+  .note b{color:#e7e9f0}
+  .note .t{color:var(--theory)} .note .s{color:var(--sample)}
+  code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#cdd6f4}
+  .btnrow{display:flex;gap:8px}
+  .btnrow button{flex:1 1 0}
+  .desc{font-size:12.5px;color:var(--dim);line-height:1.75;margin-top:8px}
+  .desc b{color:#fff}
+  .hidden{display:none !important}
+</style>
+</head>
+<body>
+<header>
+  <h1>分布浏览器：<span class="t">理论 pmf/pdf</span> &nbsp;vs&nbsp; <span class="s">N 个样本的直方图</span></h1>
+  <p>配套《概率与统计深度入门》<b>第 4 章 常见分布</b>。选一个分布、拖参数滑块看曲线/柱变形；点「重抽样」抽 <b>N</b> 个样本叠加<span class="s">归一化直方图</span>，把 N 拉大，看样本如何<b>逼近理论分布</b>。<b>von Mises</b> 单独画在圆周上——它是给二面角用的「圆上高斯」。</p>
+</header>
+<div class="wrap">
+  <div class="stage">
+   <div class="stagepad">
+    <!-- 主图：pmf/pdf + 直方图 -->
+    <div class="canvaswrap" id="mainwrap">
+      <div class="legend">
+        <span class="ln" style="border-color:var(--theory)"></span><span id="lgTheory">理论 pdf f(x)</span>
+        &nbsp;&nbsp;<span class="bar" style="background:rgba(34,199,214,.45)"></span><span class="s">N 个样本的归一化直方图</span>
+        &nbsp;&nbsp;<span class="ln" style="border-color:var(--green);border-top-style:dashed"></span>理论均值 μ
+      </div>
+      <canvas id="cv" height="430"></canvas>
+      <div class="caption" id="cap">横轴 = 取值；纵轴 = <b>密度</b>（连续）或 <b>概率</b>（离散）。直方图按总面积/总高度归一，可直接和理论曲线比高度。</div>
+    </div>
+    <!-- von Mises 圆周图 -->
+    <div class="canvaswrap vm" id="vmwrap">
+      <div class="legend">
+        <b style="color:var(--theory)">圆周上</b>：半径方向 = 在该角度的密度 f(θ)；<span class="ln" style="border-color:var(--green)"></span>平均方向 μ &nbsp;
+        <span class="bar" style="background:rgba(34,199,214,.6);border-radius:50%;width:9px;height:9px"></span>样本点（落在圆周上）
+      </div>
+      <canvas id="vm" height="380"></canvas>
+      <div class="caption"><b>von Mises = 圆上的高斯。</b> κ→0 时密度铺成均匀的一圈（圆上「无信息」）；κ 越大越收紧成 μ 处的钟形（近似方差 1/κ 的高斯）。蛋白质主链二面角 φ/ψ 活在圆周上（±180° 是同一点），普通高斯在缝合处翻车，必须用它。</div>
+    </div>
+    <div class="canvaswrap" style="background:var(--panel2)">
+      <div class="desc" id="story">说明文字。</div>
+    </div>
+   </div>
+  </div>
+
+  <div class="panel">
+    <h2>① 选分布</h2>
+    <div class="card">
+      <select id="dist">
+        <optgroup label="离散（pmf，画成柱）">
+          <option value="bernoulli">Bernoulli(p) 伯努利</option>
+          <option value="binomial">Binomial(n,p) 二项</option>
+          <option value="poisson" selected>Poisson(λ) 泊松</option>
+          <option value="geometric">Geometric(p) 几何</option>
+        </optgroup>
+        <optgroup label="连续（pdf，画成曲线）">
+          <option value="uniform">Uniform(a,b) 均匀</option>
+          <option value="normal">Normal(μ,σ) 正态/高斯</option>
+          <option value="exponential">Exponential(λ) 指数</option>
+          <option value="gamma">Gamma(α,β) 伽马</option>
+          <option value="beta">Beta(α,β) 贝塔</option>
+          <option value="studentt">Student-t(ν) t 分布</option>
+          <option value="laplace">Laplace(μ,b) 拉普拉斯</option>
+        </optgroup>
+        <optgroup label="方向 / 圆周">
+          <option value="vonmises">von Mises(μ,κ) 圆上高斯</option>
+        </optgroup>
+      </select>
+      <div class="note" id="distNote" style="margin-top:9px"></div>
+    </div>
+
+    <h2>② 参数</h2>
+    <div class="card" id="params"></div>
+
+    <h2>③ 抽样</h2>
+    <div class="card">
+      <div class="row">
+        <label>样本量 N</label>
+        <input id="sN" type="range" min="1" max="100000" step="1" value="500">
+        <div class="val" id="vN">500</div>
+      </div>
+      <div class="note">拖动即重抽样。N 小→直方图毛糙、偏离理论曲线；N 大→柱顶贴上 <span class="t">理论曲线</span>（大数定律的眼见为实）。</div>
+      <div class="btnrow" style="margin-top:10px">
+        <button id="bResample">↻ 重抽样</button>
+        <button id="bHist" class="on">直方图 开</button>
+      </div>
+    </div>
+
+    <h2>④ 实时读数</h2>
+    <div class="card">
+      <div class="stat"><span>分布</span><span id="rName">—</span></div>
+      <div class="stat"><span><span class="th">理论</span>均值 E[X]</span><span id="rMean">—</span></div>
+      <div class="stat"><span><span class="sm">样本</span>均值 x̄</span><span id="rSMean">—</span></div>
+      <div class="stat"><span><span class="th">理论</span>方差 Var</span><span id="rVar">—</span></div>
+      <div class="stat"><span><span class="sm">样本</span>方差 s²</span><span id="rSVar">—</span></div>
+      <div class="stat"><span>偏度 skew</span><span id="rSkew">—</span></div>
+      <div class="stat"><span>超额峰度 kurt</span><span id="rKurt">—</span></div>
+      <div class="stat" id="rowRR" style="display:none"><span>合向量长 R̄（圆周）</span><span id="rRR">—</span></div>
+    </div>
+
+    <h2>⑤ pmf / pdf 公式</h2>
+    <div class="card">
+      <div class="formula" id="formula">f(x) = …</div>
+      <div class="note" id="moments" style="margin-top:9px"></div>
+    </div>
+
+    <div class="btnrow">
+      <button id="bReset">重置参数</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   分布浏览器 —— 第 4 章常见分布
+   自包含：canvas 自绘坐标轴/曲线/柱/散点，无任何外部库。
+   ============================================================ */
+const el = id => document.getElementById(id);
+const cv = el('cv'), ctx = cv.getContext('2d');
+const vmc = el('vm'), vmx = vmc.getContext('2d');
+const DPR = Math.max(1, window.devicePixelRatio||1);
+
+/* ---------- 通用数学工具 ---------- */
+function logGamma(x){ // Lanczos
+  const g=7, c=[0.99999999999980993,676.5203681218851,-1259.1392167224028,
+    771.32342877765313,-176.61502916214059,12.507343278686905,
+    -0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];
+  if(x<0.5) return Math.log(Math.PI/Math.sin(Math.PI*x)) - logGamma(1-x);
+  x-=1; let a=c[0]; const t=x+g+0.5;
+  for(let i=1;i<g+2;i++) a+=c[i]/(x+i);
+  return 0.5*Math.log(2*Math.PI)+(x+0.5)*Math.log(t)-t+Math.log(a);
+}
+function gammaFn(x){ return Math.exp(logGamma(x)); }
+function logFact(n){ return logGamma(n+1); }
+function logBeta(a,b){ return logGamma(a)+logGamma(b)-logGamma(a+b); }
+// 修正贝塞尔 I0, I1（级数 + 大参数渐近）—— von Mises 用
+function besselI0(x){
+  const ax=Math.abs(x);
+  if(ax<15){ let sum=1, term=1; const y=x*x/4;
+    for(let k=1;k<60;k++){ term*=y/(k*k); sum+=term; if(term<1e-14*sum) break; } return sum; }
+  // 渐近展开
+  const z=1/ax; return Math.exp(ax)/Math.sqrt(2*Math.PI*ax)*(1+0.125*z+0.0703125*z*z);
+}
+function besselI1(x){
+  const ax=Math.abs(x);
+  let r;
+  if(ax<15){ let sum=0, term=ax/2; const y=x*x/4;
+    for(let k=0;k<60;k++){ sum+=term; term*=y/((k+1)*(k+2)); if(Math.abs(term)<1e-14*Math.abs(sum)) break; } r=sum; }
+  else { const z=1/ax; r=Math.exp(ax)/Math.sqrt(2*Math.PI*ax)*(1-0.375*z-0.1171875*z*z); }
+  return x<0?-r:r;
+}
+
+/* ---------- 标准正态采样（Box–Muller） ---------- */
+let spare=null;
+function randn(){
+  if(spare!==null){ const s=spare; spare=null; return s; }
+  let u=0,v=0; while(u===0)u=Math.random(); while(v===0)v=Math.random();
+  const r=Math.sqrt(-2*Math.log(u)), th=2*Math.PI*v;
+  spare=r*Math.sin(th); return r*Math.cos(th);
+}
+// Gamma 采样 (Marsaglia–Tsang)，shape>0, rate=1 -> 缩放
+function randGamma(shape){
+  if(shape<1){ const u=Math.random(); return randGamma(1+shape)*Math.pow(u,1/shape); }
+  const d=shape-1/3, c=1/Math.sqrt(9*d);
+  for(;;){ let x,v; do{ x=randn(); v=1+c*x; }while(v<=0); v=v*v*v;
+    const u=Math.random();
+    if(u<1-0.0331*x*x*x*x) return d*v;
+    if(Math.log(u)<0.5*x*x+d*(1-v+Math.log(v))) return d*v; }
+}
+function randBeta(a,b){ const x=randGamma(a), y=randGamma(b); return x/(x+y); }
+// von Mises 采样 (Best–Fisher)，返回 (-π,π]
+function randVonMises(mu,kappa){
+  if(kappa<1e-6) return (Math.random()*2-1)*Math.PI;
+  const a=1+Math.sqrt(1+4*kappa*kappa), b=(a-Math.sqrt(2*a))/(2*kappa), r=(1+b*b)/(2*b);
+  let theta;
+  for(;;){ const u1=Math.random(), z=Math.cos(Math.PI*u1), f=(1+r*z)/(r+z), cc=kappa*(r-f);
+    const u2=Math.random();
+    if(u2<cc*(2-cc) || u2<=cc*Math.exp(1-cc)){
+      const u3=Math.random();
+      theta = (u3-0.5>=0?1:-1)*Math.acos(f)+mu; break; }
+  }
+  // 折回 (-π,π]
+  theta=((theta+Math.PI)%(2*Math.PI)+2*Math.PI)%(2*Math.PI)-Math.PI;
+  return theta;
+}
+
+/* ============================================================
+   分布定义表
+   每个分布给：参数 schema、pmf/pdf、均值方差偏度峰度、采样、公式串
+   ============================================================ */
+const D = {
+  /* ---- 离散 ---- */
+  bernoulli:{ name:'Bernoulli(p)', discrete:true, intro:'一次试验「成功/失败」。是二项 n=1 的特例，也是 MSA 里「该位点是否为共识氨基酸」的指示变量。',
+    params:[{k:'p',lab:'p 成功概率',min:0,max:1,step:0.01,def:0.5}],
+    support:p=>({lo:0,hi:1}),
+    pmf:(x,p)=> x===0?1-p.p : x===1?p.p : 0,
+    mean:p=>p.p, varr:p=>p.p*(1-p.p),
+    skew:p=>{const q=1-p.p; return (1-2*p.p)/Math.sqrt(Math.max(p.p*q,1e-12));},
+    kurt:p=>{const q=1-p.p; return (1-6*p.p*q)/Math.max(p.p*q,1e-12);},
+    samp:p=>Math.random()<p.p?1:0,
+    formula:p=>'P(X=1)=p, P(X=0)=1−p',
+    moments:p=>'E[X]=p,  Var=p(1−p)。' },
+
+  binomial:{ name:'Binomial(n,p)', discrete:true, intro:'n 次独立伯努利里成功的次数。n 大→近似正态（de Moivre–Laplace）；p 小、np 适中→近似泊松。',
+    params:[{k:'n',lab:'n 试验数',min:1,max:80,step:1,def:20},{k:'p',lab:'p 成功概率',min:0,max:1,step:0.01,def:0.4}],
+    support:p=>({lo:0,hi:p.n}),
+    pmf:(x,p)=>{ if(x<0||x>p.n||x!==Math.round(x)) return 0;
+      return Math.exp(logFact(p.n)-logFact(x)-logFact(p.n-x)+x*Math.log(p.p||1e-300)+(p.n-x)*Math.log((1-p.p)||1e-300)); },
+    mean:p=>p.n*p.p, varr:p=>p.n*p.p*(1-p.p),
+    skew:p=>{const q=1-p.p; return (1-2*p.p)/Math.sqrt(Math.max(p.n*p.p*q,1e-12));},
+    kurt:p=>{const q=1-p.p; return (1-6*p.p*q)/Math.max(p.n*p.p*q,1e-12);},
+    samp:p=>{let s=0; for(let i=0;i<p.n;i++) if(Math.random()<p.p) s++; return s;},
+    formula:p=>'P(X=k)=C(n,k) pᵏ(1−p)ⁿ⁻ᵏ',
+    moments:p=>'E[X]=np,  Var=np(1−p)。' },
+
+  poisson:{ name:'Poisson(λ)', discrete:true, intro:'固定区间内稀有事件的计数（二项 n→∞、p→0、np=λ 的极限）。生信里：突变计数、reads 计数。均值=方差=λ。',
+    params:[{k:'lam',lab:'λ 速率',min:0.1,max:30,step:0.1,def:4}],
+    support:p=>({lo:0,hi:Math.max(10,Math.ceil(p.lam+4*Math.sqrt(p.lam)))}),
+    pmf:(x,p)=>{ if(x<0||x!==Math.round(x)) return 0; return Math.exp(x*Math.log(p.lam)-p.lam-logFact(x)); },
+    mean:p=>p.lam, varr:p=>p.lam,
+    skew:p=>1/Math.sqrt(p.lam), kurt:p=>1/p.lam,
+    samp:p=>{ // Knuth
+      const L=Math.exp(-p.lam); let k=0,prod=1;
+      do{ k++; prod*=Math.random(); }while(prod>L); return k-1; },
+    formula:p=>'P(X=k)=λᵏ e^(−λ) / k!',
+    moments:p=>'E[X]=λ,  Var=λ（均值=方差是泊松的指纹）。' },
+
+  geometric:{ name:'Geometric(p)', discrete:true, intro:'首次成功前的失败次数（支撑 0,1,2,…）。离散版「无记忆」分布，是指数分布的离散镜像。',
+    params:[{k:'p',lab:'p 成功概率',min:0.02,max:1,step:0.01,def:0.3}],
+    support:p=>({lo:0,hi:Math.max(10,Math.ceil(Math.log(0.002)/Math.log(1-p.p)))}),
+    pmf:(x,p)=>{ if(x<0||x!==Math.round(x)) return 0; return Math.pow(1-p.p,x)*p.p; },
+    mean:p=>(1-p.p)/p.p, varr:p=>(1-p.p)/(p.p*p.p),
+    skew:p=>(2-p.p)/Math.sqrt(Math.max(1-p.p,1e-12)), kurt:p=>6+(p.p*p.p)/Math.max(1-p.p,1e-12),
+    samp:p=>{ let k=0; while(Math.random()>=p.p) k++; return k; },
+    formula:p=>'P(X=k)=(1−p)ᵏ p,  k=0,1,2,…',
+    moments:p=>'E[X]=(1−p)/p,  Var=(1−p)/p²。' },
+
+  /* ---- 连续 ---- */
+  uniform:{ name:'Uniform(a,b)', discrete:false, intro:'区间上无任何偏好——固定支撑下的最大熵分布。是逆变换采样 F⁻¹(U) 的种子。',
+    params:[{k:'a',lab:'a 下界',min:-5,max:5,step:0.1,def:-2},{k:'b',lab:'b 上界',min:-5,max:5,step:0.1,def:2}],
+    support:p=>{const a=Math.min(p.a,p.b),b=Math.max(p.a,p.b); const w=Math.max(b-a,1e-6); return {lo:a-0.15*w,hi:b+0.15*w};},
+    pdf:(x,p)=>{const a=Math.min(p.a,p.b),b=Math.max(p.a,p.b); return (x>=a&&x<=b)?1/Math.max(b-a,1e-9):0;},
+    mean:p=>(p.a+p.b)/2, varr:p=>{const w=p.b-p.a; return w*w/12;},
+    skew:p=>0, kurt:p=>-6/5,
+    samp:p=>{const a=Math.min(p.a,p.b),b=Math.max(p.a,p.b); return a+Math.random()*(b-a);},
+    formula:p=>'f(x)=1/(b−a),  a≤x≤b',
+    moments:p=>'E[X]=(a+b)/2,  Var=(b−a)²/12。' },
+
+  normal:{ name:'Normal(μ,σ)', discrete:false, intro:'CLT 与「全实轴+固定均值方差」最大熵的双重产物。轻尾（e^(−x²)）——对离群值敏感，别到处默认高斯。',
+    params:[{k:'mu',lab:'μ 均值',min:-5,max:5,step:0.1,def:0},{k:'sig',lab:'σ 标准差',min:0.2,max:4,step:0.05,def:1}],
+    support:p=>({lo:p.mu-4*p.sig,hi:p.mu+4*p.sig}),
+    pdf:(x,p)=>{const z=(x-p.mu)/p.sig; return Math.exp(-0.5*z*z)/(p.sig*Math.sqrt(2*Math.PI));},
+    mean:p=>p.mu, varr:p=>p.sig*p.sig, skew:p=>0, kurt:p=>0,
+    samp:p=>p.mu+p.sig*randn(),
+    formula:p=>'f(x)=exp(−(x−μ)²/2σ²)/(σ√(2π))',
+    moments:p=>'E[X]=μ,  Var=σ²,  偏度=峰度=0（钟形基准）。' },
+
+  exponential:{ name:'Exponential(λ)', discrete:false, intro:'唯一无记忆的连续分布；「x≥0+固定均值」的最大熵。等待时间、Gillespie 反应间隔。是 Gamma 的 α=1 种子。',
+    params:[{k:'lam',lab:'λ 速率',min:0.1,max:5,step:0.05,def:1}],
+    support:p=>({lo:0,hi:Math.log(400)/p.lam}),
+    pdf:(x,p)=> x<0?0:p.lam*Math.exp(-p.lam*x),
+    mean:p=>1/p.lam, varr:p=>1/(p.lam*p.lam), skew:p=>2, kurt:p=>6,
+    samp:p=>-Math.log(Math.random())/p.lam,
+    formula:p=>'f(x)=λ e^(−λx),  x≥0',
+    moments:p=>'E[X]=1/λ,  Var=1/λ²,  偏度=2（右偏）。' },
+
+  gamma:{ name:'Gamma(α,β)', discrete:false, intro:'正支撑分布的母家族（指数/Erlang/卡方都是它的切片）。形状 α 把曲线从「贴 0 尖角」养成「对称钟形」（CLT 在 α 大时显形）。',
+    params:[{k:'al',lab:'α 形状',min:0.3,max:20,step:0.1,def:2},{k:'be',lab:'β 速率',min:0.2,max:5,step:0.05,def:1}],
+    support:p=>({lo:0,hi:(p.al/p.be)+5*Math.sqrt(p.al)/p.be+1}),
+    pdf:(x,p)=>{ if(x<=0) return p.al<1?(x===0?Infinity:0):0;
+      return Math.exp(p.al*Math.log(p.be)-logGamma(p.al)+(p.al-1)*Math.log(x)-p.be*x); },
+    mean:p=>p.al/p.be, varr:p=>p.al/(p.be*p.be),
+    skew:p=>2/Math.sqrt(p.al), kurt:p=>6/p.al,
+    samp:p=>randGamma(p.al)/p.be,
+    formula:p=>'f(x)=βᵅ xᵅ⁻¹ e^(−βx) / Γ(α),  x≥0',
+    moments:p=>'E[X]=α/β,  Var=α/β²,  偏度=2/√α（α↑→趋正态）。' },
+
+  beta:{ name:'Beta(α,β)', discrete:false, intro:'[0,1] 上「概率的分布」。α 像伪成功、β 像伪失败。能在均匀—钟形—U 形—偏峰间连续变形。第 8 章 Binomial 的共轭先验。',
+    params:[{k:'al',lab:'α',min:0.3,max:12,step:0.1,def:2},{k:'be',lab:'β',min:0.3,max:12,step:0.1,def:5}],
+    support:p=>({lo:0,hi:1}),
+    pdf:(x,p)=>{ if(x<=0) return p.al<1?(x===0?Infinity:0):0; if(x>=1) return p.be<1?(x===1?Infinity:0):0;
+      return Math.exp((p.al-1)*Math.log(x)+(p.be-1)*Math.log(1-x)-logBeta(p.al,p.be)); },
+    mean:p=>p.al/(p.al+p.be), varr:p=>{const s=p.al+p.be; return p.al*p.be/(s*s*(s+1));},
+    skew:p=>{const a=p.al,b=p.be,s=a+b; return 2*(b-a)*Math.sqrt(s+1)/((s+2)*Math.sqrt(a*b));},
+    kurt:p=>{const a=p.al,b=p.be,s=a+b; return 6*((a-b)*(a-b)*(s+1)-a*b*(s+2))/(a*b*(s+2)*(s+3));},
+    samp:p=>randBeta(p.al,p.be),
+    formula:p=>'f(x)=xᵅ⁻¹(1−x)ᵝ⁻¹ / B(α,β),  0≤x≤1',
+    moments:p=>'E[X]=α/(α+β),  Var=αβ/[(α+β)²(α+β+1)]。' },
+
+  studentt:{ name:'Student-t(ν)', discrete:false, intro:'比正态尾更重（幂律 |t|⁻⁽ᵛ⁺¹⁾）。ν=1 即柯西（无均值！），ν≤2 方差无穷，ν→∞ 退回正态。鲁棒回归的噪声模型。',
+    params:[{k:'nu',lab:'ν 自由度',min:1,max:40,step:1,def:3}],
+    support:p=>{const s=p.nu>2?Math.sqrt(p.nu/(p.nu-2)):3; return {lo:-Math.max(6,4*s),hi:Math.max(6,4*s)};},
+    pdf:(x,p)=>{const v=p.nu; return Math.exp(logGamma((v+1)/2)-logGamma(v/2)-0.5*Math.log(v*Math.PI)-((v+1)/2)*Math.log(1+x*x/v));},
+    mean:p=>p.nu>1?0:NaN, varr:p=>p.nu>2?p.nu/(p.nu-2):(p.nu>1?Infinity:NaN),
+    skew:p=>p.nu>3?0:NaN, kurt:p=>p.nu>4?6/(p.nu-4):(p.nu>2?Infinity:NaN),
+    samp:p=>{const z=randn(), w=randGamma(p.nu/2)*2; return z/Math.sqrt(w/p.nu);}, // chi2_v = Gamma(v/2,1/2)
+    formula:p=>'f(x)=Γ((ν+1)/2)/[√(νπ)Γ(ν/2)] · (1+x²/ν)^(−(ν+1)/2)',
+    moments:p=>'E[X]=0 (ν>1),  Var=ν/(ν−2) (ν>2)；ν=1 即柯西，连均值都没有。' },
+
+  laplace:{ name:'Laplace(μ,b)', discrete:false, intro:'双指数：中心比高斯更尖、尾比高斯更重（e^(−|x|)）。「Laplace 似然 ⟺ L1 损失」「Laplace 先验 ⟺ LASSO 稀疏」。',
+    params:[{k:'mu',lab:'μ 位置',min:-5,max:5,step:0.1,def:0},{k:'b',lab:'b 尺度',min:0.2,max:4,step:0.05,def:1}],
+    support:p=>({lo:p.mu-8*p.b,hi:p.mu+8*p.b}),
+    pdf:(x,p)=> Math.exp(-Math.abs(x-p.mu)/p.b)/(2*p.b),
+    mean:p=>p.mu, varr:p=>2*p.b*p.b, skew:p=>0, kurt:p=>3,
+    samp:p=>{const u=Math.random()-0.5; return p.mu-p.b*Math.sign(u)*Math.log(1-2*Math.abs(u));},
+    formula:p=>'f(x)=exp(−|x−μ|/b)/(2b)',
+    moments:p=>'E[X]=μ,  Var=2b²,  超额峰度=3（比高斯尖）。' },
+
+  /* ---- 圆周 ---- */
+  vonmises:{ name:'von Mises(μ,κ)', discrete:false, circular:true, intro:'圆周上的「高斯」。μ 平均方向、κ 集中度（precision）。κ→0 趋均匀、κ 大近似方差 1/κ 的高斯。二面角 φ/ψ 建模的核心工具。',
+    params:[{k:'mu',lab:'μ 中心(°)',min:-180,max:180,step:1,def:0},{k:'kap',lab:'κ 集中度',min:0,max:20,step:0.1,def:2}],
+    support:p=>({lo:-Math.PI,hi:Math.PI}),
+    pdf:(x,p)=>{const mu=p.mu*Math.PI/180; return Math.exp(p.kap*Math.cos(x-mu))/(2*Math.PI*besselI0(p.kap));},
+    mean:p=>p.mu*Math.PI/180,  // 圆周均值（角度，弧度）
+    varr:p=>1-besselI1(p.kap)/Math.max(besselI0(p.kap),1e-12), // 圆周方差 1−R̄
+    skew:p=>0, kurt:p=>NaN,
+    samp:p=>randVonMises(p.mu*Math.PI/180,p.kap),
+    formula:p=>'f(θ)=exp(κ cos(θ−μ)) / (2π I₀(κ))',
+    moments:p=>'圆周均值=μ；R̄=I₁(κ)/I₀(κ) 是合向量长（集中度）；圆周方差=1−R̄。' }
+};
+
+/* ============================================================
+   状态
+   ============================================================ */
+let cur='poisson';
+let P={};        // 当前参数值
+let samples=[];  // 当前样本
+let showHist=true;
+
+/* ---------- 构建参数滑块 ---------- */
+function buildParams(){
+  const d=D[cur]; const box=el('params'); box.innerHTML='';
+  P={};
+  d.params.forEach(spec=>{
+    P[spec.k]=spec.def;
+    const row=document.createElement('div'); row.className='row';
+    const lab=document.createElement('label'); lab.textContent=spec.lab;
+    const inp=document.createElement('input'); inp.type='range';
+    inp.min=spec.min; inp.max=spec.max; inp.step=spec.step; inp.value=spec.def;
+    inp.dataset.k=spec.k;
+    const val=document.createElement('div'); val.className='val';
+    val.id='pv_'+spec.k;
+    val.textContent=fmtParam(spec.def,spec.step);
+    inp.addEventListener('input',()=>{
+      P[spec.k]=+inp.value;
+      el('pv_'+spec.k).textContent=fmtParam(+inp.value,spec.step);
+      onParamChange();
+    });
+    row.appendChild(lab); row.appendChild(inp); row.appendChild(val);
+    box.appendChild(row);
+  });
+}
+function fmtParam(v,step){ return (step<1)? v.toFixed(step<0.1?2:1) : String(Math.round(v)); }
+
+/* ---------- 抽样 ---------- */
+function resample(){
+  const d=D[cur], N=+el('sN').value;
+  samples=new Array(N);
+  // 性能保护：N 很大时也能抽，但封顶以保流畅（直方图统计无碍）
+  for(let i=0;i<N;i++) samples[i]=d.samp(P);
+}
+
+/* ---------- 样本统计 ---------- */
+function sampleStats(){
+  const n=samples.length; if(n===0) return null;
+  if(D[cur].circular){
+    // 圆周统计
+    let C=0,S=0; for(const t of samples){ C+=Math.cos(t); S+=Math.sin(t); }
+    C/=n; S/=n; const R=Math.sqrt(C*C+S*S); const mu=Math.atan2(S,C);
+    return {circular:true, mean:mu, R:R, varr:1-R};
+  }
+  let m=0; for(const x of samples) m+=x; m/=n;
+  let v=0,s3=0,s4=0;
+  for(const x of samples){ const dx=x-m; v+=dx*dx; }
+  v/= (n>1? n-1 : 1);
+  const sd=Math.sqrt(Math.max(v,1e-30));
+  for(const x of samples){ const z=(x-m)/sd; s3+=z*z*z; s4+=z*z*z*z; }
+  return {mean:m, varr:v, skew:s3/n, kurt:s4/n-3};
+}
+
+/* ============================================================
+   绘制：主图（pmf 柱 / pdf 曲线 + 直方图）
+   ============================================================ */
+function sizeCanvas(c,cx){
+  const w=c.clientWidth;
+  c.width=w*DPR; c.height=c.height; // height set via attribute / css
+  const h=parseInt(c.getAttribute('height'));
+  c.height=h*DPR;
+  cx.setTransform(DPR,0,0,DPR,0,0);
+  return {W:w, H:h};
+}
+
+function drawMain(){
+  const d=D[cur];
+  const {W,H}=sizeCanvas(cv,ctx);
+  ctx.clearRect(0,0,W,H);
+  const ml=56,mr=18,mt=18,mb=40, pw=W-ml-mr, ph=H-mt-mb;
+  const sup=d.support(P);
+  let lo=sup.lo, hi=sup.hi;
+  if(!(hi>lo)){ hi=lo+1; }
+
+  if(d.discrete){
+    drawDiscrete(d,lo,hi,ml,mt,pw,ph,mb);
+  } else {
+    drawContinuous(d,lo,hi,ml,mt,pw,ph,mb);
+  }
+}
+
+function drawAxes(ml,mt,pw,ph,xlo,xhi,ymax,ylab,xticks){
+  const X=t=>ml+ (t-xlo)/(xhi-xlo)*pw;
+  const Y=v=>mt+ph-(v/ymax)*ph;
+  ctx.font='11px system-ui,sans-serif';
+  // 纵网格
+  ctx.fillStyle='#7a8198';
+  for(let i=0;i<=4;i++){ const yy=mt+ph-i/4*ph; const vv=ymax*i/4;
+    ctx.strokeStyle='#1c2230'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(ml,yy); ctx.lineTo(ml+pw,yy); ctx.stroke();
+    ctx.fillText(vv.toFixed(vv<1?2:1), 6, yy+4);
+  }
+  // 横刻度
+  ctx.fillStyle='#7a8198';
+  for(const t of xticks){ const xx=X(t);
+    ctx.strokeStyle='#1c2230'; ctx.beginPath(); ctx.moveTo(xx,mt); ctx.lineTo(xx,mt+ph); ctx.stroke();
+    ctx.fillStyle='#7a8198'; ctx.textAlign='center';
+    ctx.fillText(fmtTick(t), xx, mt+ph+16); ctx.textAlign='left';
+  }
+  // 轴
+  ctx.strokeStyle='#3a4256'; ctx.lineWidth=1.2;
+  ctx.beginPath(); ctx.moveTo(ml,mt); ctx.lineTo(ml,mt+ph); ctx.lineTo(ml+pw,mt+ph); ctx.stroke();
+  ctx.save(); ctx.translate(13,mt+ph/2); ctx.rotate(-Math.PI/2);
+  ctx.fillStyle='#9aa0b4'; ctx.textAlign='center'; ctx.fillText(ylab,0,0); ctx.restore();
+  ctx.textAlign='left';
+}
+function fmtTick(t){ if(Math.abs(t)>=100) return t.toFixed(0); if(Math.abs(t-Math.round(t))<1e-9) return String(Math.round(t)); return t.toFixed(1); }
+function niceTicks(lo,hi,n){
+  const arr=[]; for(let i=0;i<=n;i++) arr.push(lo+(hi-lo)*i/n); return arr;
+}
+
+function drawDiscrete(d,lo,hi,ml,mt,pw,ph,mb){
+  const k0=Math.max(0,Math.floor(lo)), k1=Math.ceil(hi);
+  const K=k1-k0+1;
+  // 理论 pmf
+  const pmfArr=[]; let pmax=0;
+  for(let k=k0;k<=k1;k++){ const v=d.pmf(k,P); pmfArr.push(v); if(v>pmax)pmax=v; }
+  // 样本直方图（计数 / N）
+  let histMax=0, hist=null;
+  if(showHist && samples.length){
+    hist=new Array(K).fill(0);
+    for(const x of samples){ const k=Math.round(x); if(k>=k0&&k<=k1) hist[k-k0]++; }
+    for(let i=0;i<K;i++){ hist[i]/=samples.length; if(hist[i]>histMax) histMax=hist[i]; }
+  }
+  const ymax=Math.max(pmax,histMax,1e-6)*1.15;
+  const xlo=k0-0.6, xhi=k1+0.6;
+  const X=t=>ml+ (t-xlo)/(xhi-xlo)*pw;
+  const Y=v=>mt+ph-(v/ymax)*ph;
+  drawAxes(ml,mt,pw,ph,xlo,xhi,ymax,'概率 P(X=k)', niceTicks(k0, k1, Math.min(K-1,10)).map(Math.round).filter((v,i,a)=>a.indexOf(v)===i));
+  const bw=Math.min((pw/K)*0.42, 26);
+  // 样本直方图柱（青，偏左）
+  if(hist){
+    for(let i=0;i<K;i++){ if(hist[i]<=0) continue; const cx=X(k0+i);
+      const x0=cx-bw, h=ph-(Y(hist[i])-mt);
+      ctx.fillStyle='rgba(34,199,214,0.42)';
+      ctx.fillRect(x0, Y(hist[i]), bw, h);
+      ctx.strokeStyle='rgba(34,199,214,0.85)'; ctx.lineWidth=1; ctx.strokeRect(x0,Y(hist[i]),bw,h);
+    }
+  }
+  // 理论 pmf 柱（橙，偏右）
+  for(let i=0;i<K;i++){ if(pmfArr[i]<=0) continue; const cx=X(k0+i);
+    const x0= hist? cx+1 : cx-bw/2; const w= hist? bw : bw;
+    ctx.fillStyle='rgba(245,166,35,0.30)';
+    ctx.fillRect(x0, Y(pmfArr[i]), w, ph-(Y(pmfArr[i])-mt));
+    ctx.strokeStyle='var(--theory)'; ctx.strokeStyle='#f5a623'; ctx.lineWidth=1.6;
+    ctx.strokeRect(x0, Y(pmfArr[i]), w, ph-(Y(pmfArr[i])-mt));
+    // 顶部标记圆点（理论）
+    ctx.fillStyle='#f5a623'; ctx.beginPath(); ctx.arc(x0+w/2, Y(pmfArr[i]), 2.4, 0, 2*Math.PI); ctx.fill();
+  }
+  // 均值竖线
+  const mu=d.mean(P);
+  if(isFinite(mu)){ const xx=X(mu);
+    ctx.strokeStyle='#7bd88f'; ctx.lineWidth=1.6; ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.moveTo(xx,mt); ctx.lineTo(xx,mt+ph); ctx.stroke(); ctx.setLineDash([]);
+  }
+}
+
+function drawContinuous(d,lo,hi,ml,mt,pw,ph,mb){
+  const NS=400;
+  // 估峰值
+  let pmax=0;
+  for(let i=0;i<=NS;i++){ const x=lo+(hi-lo)*i/NS; const v=d.pdf(x,P); if(isFinite(v)&&v>pmax)pmax=v; }
+  if(!(pmax>0)) pmax=1;
+  // 直方图
+  let hist=null, bins=0, histMax=0, bw=1;
+  if(showHist && samples.length){
+    bins=Math.min(60, Math.max(12, Math.round(Math.sqrt(samples.length))));
+    bw=(hi-lo)/bins; hist=new Array(bins).fill(0);
+    let inN=0;
+    for(const x of samples){ if(x>=lo&&x<hi){ const b=Math.min(bins-1,Math.floor((x-lo)/bw)); hist[b]++; inN++; } }
+    // 归一化为密度：count/(N * binwidth)（用全体 N，越界样本表现为面积略<1，正确）
+    for(let i=0;i<bins;i++){ hist[i]=hist[i]/(samples.length*bw); if(hist[i]>histMax)histMax=hist[i]; }
+  }
+  const ymax=Math.max(pmax,histMax,1e-6)*1.12;
+  const X=x=>ml+(x-lo)/(hi-lo)*pw;
+  const Y=v=>mt+ph-(Math.min(v,ymax)/ymax)*ph;
+  drawAxes(ml,mt,pw,ph,lo,hi,ymax,'密度 f(x)', niceTicks(lo,hi,8));
+  // 直方图柱
+  if(hist){
+    for(let i=0;i<bins;i++){ if(hist[i]<=0) continue;
+      const x0=X(lo+i*bw), x1=X(lo+(i+1)*bw);
+      ctx.fillStyle='rgba(34,199,214,0.34)';
+      ctx.fillRect(x0, Y(hist[i]), x1-x0, ph-(Y(hist[i])-mt));
+      ctx.strokeStyle='rgba(34,199,214,0.6)'; ctx.lineWidth=0.6;
+      ctx.strokeRect(x0, Y(hist[i]), x1-x0, ph-(Y(hist[i])-mt));
+    }
+  }
+  // 理论 pdf 曲线（带阴影）
+  ctx.beginPath();
+  for(let i=0;i<=NS;i++){ const x=lo+(hi-lo)*i/NS; let v=d.pdf(x,P); if(!isFinite(v))v=ymax;
+    const xx=X(x), yy=Y(v); if(i===0)ctx.moveTo(xx,yy); else ctx.lineTo(xx,yy); }
+  ctx.lineTo(X(hi),mt+ph); ctx.lineTo(X(lo),mt+ph); ctx.closePath();
+  ctx.fillStyle='rgba(245,166,35,0.10)'; ctx.fill();
+  ctx.beginPath();
+  for(let i=0;i<=NS;i++){ const x=lo+(hi-lo)*i/NS; let v=d.pdf(x,P); if(!isFinite(v))v=ymax;
+    const xx=X(x), yy=Y(v); if(i===0)ctx.moveTo(xx,yy); else ctx.lineTo(xx,yy); }
+  ctx.strokeStyle='#f5a623'; ctx.lineWidth=2.4; ctx.stroke();
+  // 均值竖线
+  const mu=d.mean(P);
+  if(isFinite(mu)){ const xx=X(mu);
+    ctx.strokeStyle='#7bd88f'; ctx.lineWidth=1.6; ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.moveTo(xx,mt); ctx.lineTo(xx,mt+ph); ctx.stroke(); ctx.setLineDash([]);
+  }
+}
+
+/* ============================================================
+   绘制：von Mises 极坐标圆周图
+   ============================================================ */
+function drawVM(){
+  const d=D[cur];
+  const {W,H}=sizeCanvas(vmc,vmx);
+  vmx.clearRect(0,0,W,H);
+  const cxp=W/2, cyp=H/2, R0=Math.min(W,H)*0.34;
+  const mu=P.mu*Math.PI/180, kap=P.kap;
+  // 角度坐标 → 屏幕：0°在右、逆时针为正，但二面角习惯：我们让 0°朝上更直观？保持标准数学：0右,逆时针
+  function ang2xy(theta, rad){ return [cxp+rad*Math.cos(theta), cyp-rad*Math.sin(theta)]; }
+  // 基准圆
+  vmx.strokeStyle='#2b3040'; vmx.lineWidth=1.2;
+  vmx.beginPath(); vmx.arc(cxp,cyp,R0,0,2*Math.PI); vmx.stroke();
+  // 角度刻度
+  vmx.font='11px system-ui,sans-serif'; vmx.fillStyle='#7a8198'; vmx.textAlign='center';
+  const ticks=[[0,'0°'],[Math.PI/2,'90°'],[Math.PI,'±180°'],[-Math.PI/2,'−90°']];
+  for(const [a,lab] of ticks){ const [tx,ty]=ang2xy(a,R0+16);
+    vmx.beginPath(); const [ix,iy]=ang2xy(a,R0); const [ox,oy]=ang2xy(a,R0+5);
+    vmx.moveTo(ix,iy); vmx.lineTo(ox,oy); vmx.strokeStyle='#3a4256'; vmx.stroke();
+    vmx.fillText(lab,tx,ty+4); }
+  // 密度峰值（用于半径缩放）：vM 在 θ=μ 取最大
+  const fmax=d.pdf(mu,P) || (1/(2*Math.PI));
+  const Rmax=R0*0.92, Rmin=R0*0.04;
+  function r(theta){ const f=d.pdf(theta,P); return Rmin + (f/Math.max(fmax,1e-9))*(Rmax-Rmin); }
+  // 密度轮廓（半径=密度），从基准圆向外
+  vmx.beginPath();
+  const M=240;
+  for(let i=0;i<=M;i++){ const th=-Math.PI+2*Math.PI*i/M; const [x,y]=ang2xy(th, R0+ r(th)-Rmin );
+    if(i===0)vmx.moveTo(x,y); else vmx.lineTo(x,y); }
+  vmx.closePath();
+  vmx.fillStyle='rgba(245,166,35,0.13)'; vmx.fill();
+  vmx.strokeStyle='#f5a623'; vmx.lineWidth=2.2; vmx.stroke();
+  // 样本点：投到基准圆上，带抖动表现密度
+  if(showHist && samples.length){
+    const show=Math.min(samples.length,1500);
+    vmx.fillStyle='rgba(34,199,214,0.6)';
+    for(let i=0;i<show;i++){ const th=samples[Math.floor(i*samples.length/show)];
+      const rr=R0+ (Math.random()*8-4); const [x,y]=ang2xy(th,rr);
+      vmx.beginPath(); vmx.arc(x,y,1.7,0,2*Math.PI); vmx.fill(); }
+  }
+  // 平均方向 μ 箭头
+  const Rbar = besselI1(kap)/Math.max(besselI0(kap),1e-12); // 合向量长
+  const [mx,my]=ang2xy(mu, R0*Math.max(Rbar,0.06)+0);
+  vmx.strokeStyle='#7bd88f'; vmx.lineWidth=2.4;
+  vmx.beginPath(); vmx.moveTo(cxp,cyp); vmx.lineTo(mx,my); vmx.stroke();
+  vmx.fillStyle='#7bd88f'; vmx.beginPath(); vmx.arc(mx,my,3.5,0,2*Math.PI); vmx.fill();
+  // 中心点
+  vmx.fillStyle='#9aa0b4'; vmx.beginPath(); vmx.arc(cxp,cyp,2.5,0,2*Math.PI); vmx.fill();
+  // 标注
+  vmx.fillStyle='#e7e9f0'; vmx.textAlign='left';
+  vmx.fillText('μ='+P.mu.toFixed(0)+'°,  κ='+kap.toFixed(1)+',  R̄='+Rbar.toFixed(3), 12, 18);
+}
+
+/* ============================================================
+   读数与公式更新
+   ============================================================ */
+function updateReadout(){
+  const d=D[cur];
+  el('rName').textContent=d.name;
+  const mu=d.mean(P), vv=d.varr(P), sk=d.skew(P), ku=d.kurt(P);
+  el('rMean').textContent = d.circular? (P.mu.toFixed(0)+'° (圆周)') : fmtNum(mu);
+  el('rVar').textContent  = fmtNum(vv);
+  el('rSkew').textContent = isFinite(sk)?fmtNum(sk):(isNaN(sk)?'不存在':'∞');
+  el('rKurt').textContent = isFinite(ku)?fmtNum(ku):(isNaN(ku)?'—':'∞');
+
+  const st=sampleStats();
+  if(st){
+    if(st.circular){
+      el('rSMean').textContent= (st.mean*180/Math.PI).toFixed(1)+'°';
+      el('rSVar').textContent = fmtNum(st.varr)+' (1−R̄)';
+    } else {
+      el('rSMean').textContent=fmtNum(st.mean);
+      el('rSVar').textContent =fmtNum(st.varr);
+    }
+  } else { el('rSMean').textContent='—'; el('rSVar').textContent='—'; }
+  // 圆周专属行
+  if(d.circular){ el('rowRR').style.display='flex';
+    const Rbar=besselI1(P.kap)/Math.max(besselI0(P.kap),1e-12);
+    el('rRR').textContent='理论 '+Rbar.toFixed(3)+(st?(' / 样本 '+st.R.toFixed(3)):'');
+  } else el('rowRR').style.display='none';
+
+  el('formula').textContent=d.formula(P);
+  el('moments').innerHTML='<b>矩</b>：'+d.moments(P);
+  el('distNote').textContent=d.intro;
+  el('story').innerHTML=storyText(d);
+}
+function fmtNum(x){ if(x===undefined||x===null||isNaN(x)) return '—';
+  if(!isFinite(x)) return '∞';
+  if(Math.abs(x)>=1000) return x.toFixed(0);
+  if(Math.abs(x)>=100) return x.toFixed(1);
+  return x.toFixed(3); }
+
+function storyText(d){
+  const N=+el('sN').value;
+  let s='<b>你在看什么。</b> ';
+  if(d.discrete) s+='离散分布：<span class="t">橙柱/橙点</span>是理论概率 P(X=k)，<span class="s">青柱</span>是 '+N+' 个样本里 k 出现的<b>频率</b>。';
+  else if(d.circular) s+='圆周分布：上方圆图里<span class="t">橙色轮廓</span>的半径 = 该角度的密度，<span class="s">青点</span>是落在圆周上的样本，<span style="color:var(--green)">绿箭头</span>是平均方向 μ（长度=合向量 R̄，越长越集中）。';
+  else s+='连续分布：<span class="t">橙曲线</span>是理论密度 f(x)，<span class="s">青柱</span>是 '+N+' 个样本的归一化直方图（柱面积≈1，可直接比高度）。';
+  s+='<span style="color:var(--green)"> 绿虚线</span>=理论均值 μ。';
+  s+='<br><br><b>该注意什么。</b> 把 <b>N</b> 从小拖到大：直方图从毛糙逐渐贴上理论曲线——这就是<b>大数定律</b>的眼见为实。改参数滑块，看曲线形状、均值方差、偏度峰度同步变化。';
+  // 分布特有提示
+  const tips={
+    poisson:'特别留意：<b>均值≈方差≈λ</b>（读数里两栏理论值相等，泊松的指纹）。把 λ 拉大，柱形从右偏逐渐变对称（趋正态）。',
+    binomial:'把 <b>n</b> 拉大、p 居中→柱形趋钟形（de Moivre–Laplace）；若 p→0 而 np 不大，则形状像泊松。',
+    gamma:'把 <b>α</b> 从 0.5 拖到 20：曲线从「贴 0 的尖角」长成「对称钟形」——大 α 的 Gamma 是许多指数之和，CLT 在此显形。',
+    studentt:'把 <b>ν</b> 调到 1：方差栏显示 ∞、偏度「不存在」——这是柯西，连均值都没有。ν→大时退回正态。注意小 ν 时偶尔抽到极端样本（重尾）。',
+    beta:'拖 (α,β) 看它在均匀(1,1)—钟形—U 形(α,β<1)—偏峰间连续变形：一个分布族覆盖「对概率的各种信念」。',
+    laplace:'对比正态：同样均值下 Laplace 中心更尖、尾更重（超额峰度=3）。这对应 L1 损失/LASSO 稀疏。',
+    vonmises:'把 <b>κ</b> 从 0 拖到大：密度从「均匀一圈」（圆上无信息）收紧成 μ 处的钟形。大 κ 时近似方差 1/κ 的高斯——这正是「圆上高斯」的精确含义，是二面角 φ/ψ 建模的核心。',
+    exponential:'无记忆性：右偏、偏度恒=2。它是 Gamma 的 α=1 种子。',
+    geometric:'指数分布的离散镜像，同样无记忆、右偏。',
+    uniform:'偏度=0、超额峰度=−6/5（比正态「平」）。它是逆变换采样的种子。',
+    normal:'偏度=峰度=0 的钟形基准；轻尾，对离群值敏感——别到处默认高斯。',
+    bernoulli:'最简单的随机变量：只有 0/1。它是二项 n=1 的特例。'
+  };
+  if(tips[cur]) s+='<br><br><b>'+d.name+'。</b> '+tips[cur];
+  return s;
+}
+
+/* ============================================================
+   事件与刷新
+   ============================================================ */
+let rafPending=false;
+function requestDraw(){ if(rafPending) return; rafPending=true;
+  requestAnimationFrame(()=>{ rafPending=false; redraw(); }); }
+function redraw(){
+  const d=D[cur];
+  if(d.circular){ el('vmwrap').style.display='block'; el('mainwrap').style.display='none'; drawVM(); }
+  else { el('vmwrap').style.display='none'; el('mainwrap').style.display='block'; drawMain(); }
+  // 图例文字
+  el('lgTheory').textContent = d.discrete? '理论 pmf P(X=k)' : '理论 pdf f(x)';
+  updateReadout();
+}
+
+function onParamChange(){ resample(); requestDraw(); } // 改参数→新分布→重抽样更直观
+function switchDist(){
+  cur=el('dist').value;
+  buildParams();
+  resample();
+  requestDraw();
+}
+
+el('dist').addEventListener('change',switchDist);
+el('sN').addEventListener('input',()=>{
+  el('vN').textContent=(+el('sN').value).toLocaleString('en-US');
+  resample(); requestDraw();
+});
+el('bResample').addEventListener('click',()=>{ resample(); requestDraw(); });
+el('bHist').addEventListener('click',function(){
+  showHist=!showHist; this.textContent='直方图 '+(showHist?'开':'关');
+  this.classList.toggle('on',showHist); requestDraw();
+});
+el('bReset').addEventListener('click',()=>{ buildParams(); resample(); requestDraw(); });
+window.addEventListener('resize',()=>requestDraw());
+
+/* ---------- 初始化 ---------- */
+function init(){
+  el('dist').value=cur;
+  el('vN').textContent=(+el('sN').value).toLocaleString('en-US');
+  buildParams();
+  resample();
+  // 稍延迟以确保 canvas clientWidth 就绪
+  requestAnimationFrame(()=>redraw());
+}
+init();
+</script>
+</body>
+</html>
