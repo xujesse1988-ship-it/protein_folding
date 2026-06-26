@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>梯度下降在损失面上下降 · 学习率 / 动量 / 病态 / 非凸 —— 配套第 4 章</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a24; --panel2:#1f2330; --line:#2b3040;
+    --text:#e7e9f0; --dim:#9aa0b4;
+    --orange:#f5a623;  /* 轨迹 / 当前点 */
+    --cyan:#22c7d6;    /* 损失曲线 / 梯度 */
+    --yellow:#ffd166;  /* 起点 / 高亮 */
+    --violet:#b388ff;  /* 极小点 / 目标 */
+    --red:#ef6b73;     /* 发散 / 警示 */
+    --green:#7bd88f;   /* 收敛命中 */
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;}
+  header{padding:13px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{margin:0;font-size:18px;letter-spacing:.3px}
+  header h1 .c{color:var(--cyan)} header h1 .o{color:var(--orange)}
+  header p{margin:5px 0 0;color:var(--dim);font-size:13px;line-height:1.65}
+  header p b{color:#fff}
+  .wrap{display:flex;height:calc(100% - 86px);min-height:0}
+  .stage{position:relative;flex:1 1 auto;min-width:0;overflow:hidden;
+    background:radial-gradient(circle at 48% 46%,#161a26 0%,#0d0f15 84%)}
+  #cv{display:block;width:100%;height:100%;cursor:crosshair}
+  .legend{position:absolute;left:14px;top:12px;font-size:12.5px;pointer-events:none;
+    background:rgba(15,17,23,.62);padding:8px 11px;border-radius:8px;border:1px solid var(--line);line-height:1.95}
+  .legend .ln{display:inline-block;width:18px;height:0;border-top:3px solid;margin-right:6px;vertical-align:middle}
+  .legend .dn{display:inline-block;width:18px;height:0;border-top:3px dashed;margin-right:6px;vertical-align:middle}
+  .legend .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:middle}
+  .hint{position:absolute;left:14px;bottom:12px;color:var(--dim);font-size:12px;pointer-events:none;
+    background:rgba(15,17,23,.55);padding:6px 10px;border-radius:8px;border:1px solid var(--line);max-width:620px;line-height:1.6}
+  .panel{flex:0 0 430px;max-width:55%;overflow-y:auto;border-left:1px solid var(--line);background:var(--panel);padding:16px}
+  .panel h2{font-size:14px;margin:18px 0 8px;color:#fff}
+  .panel h2:first-child{margin-top:0}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+  button{background:#262b3a;color:var(--text);border:1px solid var(--line);border-radius:8px;
+    padding:7px 11px;font-size:13px;cursor:pointer}
+  button:hover{filter:brightness(1.13)}
+  button.active{background:#2f3a4f;border-color:var(--cyan);color:#fff}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .row{display:flex;align-items:center;gap:10px;margin:9px 0}
+  .row label{flex:0 0 92px;font-weight:600;font-size:13px}
+  input[type=range]{flex:1 1 auto;accent-color:var(--cyan)}
+  .val{flex:0 0 58px;text-align:right;font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px}
+  .stat{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px dashed #2b3040}
+  .stat:last-child{border-bottom:none}
+  .stat span:last-child{color:#fff;font-variant-numeric:tabular-nums}
+  .note{font-size:12.5px;color:var(--dim);line-height:1.85}
+  .note b{color:#e7e9f0}
+  .note .o{color:var(--orange)} .note .c{color:var(--cyan)} .note .y{color:var(--yellow)}
+  .note .v{color:var(--violet)} .note .r{color:var(--red)} .note .g{color:var(--green)}
+  .note p{margin:6px 0}
+  code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#cdd6f4}
+  .presets{display:flex;flex-wrap:wrap;gap:6px}
+  .presets button{flex:1 1 46%;font-size:12px;padding:7px 4px}
+  .opts{display:flex;gap:6px}
+  .opts button{flex:1 1 0;font-size:12.5px}
+  .btnrow{display:flex;gap:8px;margin-top:8px}
+  .btnrow button{flex:1 1 0}
+  .pill{display:inline-block;padding:1px 8px;border-radius:6px;font-size:12px;font-weight:600;margin-left:6px}
+  .pill.ok{background:rgba(123,216,143,.16);color:var(--green)}
+  .pill.warn{background:rgba(245,166,35,.16);color:var(--orange)}
+  .pill.bad{background:rgba(239,107,115,.16);color:var(--red)}
+  #lossCv{display:block;width:100%;height:128px;background:#12141d;border:1px solid var(--line);border-radius:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="o">梯度下降</span>在<span class="c">损失面</span>上下降 · 亲眼看见学习率 / 动量 / 病态 / 非凸</h1>
+  <p>本玩具演示第 4 章的核心：优化就是<b>在损失曲面上往低处走</b>。每一步沿<b>负梯度</b> −∇L 迈出 η（学习率），轨迹在等高线（contour）上画出来。<b>η 太大</b>→震荡甚至蹦出去发散；<b>η 太小</b>→爬行半天；<b>病态峡谷</b>里普通 GD 横跨山谷来回弹，而<b style="color:var(--violet)">动量（momentum）</b>沿谷底加速；<b>非凸</b>地形里不同起点落进不同极小、鞍点附近近乎停滞。配套《机器学习与深度学习深度入门》第 4 章 §4.2「梯度下降 / SGD / 动量」、§4.3「凸 vs 非凸与损失曲面」。</p>
+</header>
+<div class="wrap">
+  <div class="stage">
+    <canvas id="cv"></canvas>
+    <div class="legend" id="legend"></div>
+    <div class="hint" id="hint"></div>
+  </div>
+  <div class="panel">
+
+    <h2>① 损失面（loss surface）预设</h2>
+    <div class="card">
+      <div class="presets">
+        <button data-s="bowl" class="active">凸碗（各向同性）</button>
+        <button data-s="valley">病态长峡谷</button>
+        <button data-s="nonconvex">非凸（双极小+鞍点）</button>
+        <button data-s="rosen">Rosenbrock 香蕉谷</button>
+      </div>
+      <div class="note" id="surfNote" style="margin-top:10px"></div>
+    </div>
+
+    <h2>② 优化器（optimizer）</h2>
+    <div class="card">
+      <div class="opts">
+        <button data-o="gd" class="active">GD</button>
+        <button data-o="mom">动量 Momentum</button>
+        <button data-o="sgd">带噪 SGD</button>
+      </div>
+      <div class="row"><label>学习率 η</label><input id="sEta" type="range" min="-4" max="0.3" step="0.02" value="-1.4"><span class="val" id="vEta">0.040</span></div>
+      <div class="row"><label>动量 β</label><input id="sBeta" type="range" min="0" max="0.98" step="0.01" value="0.9"><span class="val" id="vBeta">0.90</span></div>
+      <div class="row"><label>噪声 σ</label><input id="sNoise" type="range" min="0" max="3" step="0.05" value="0.8"><span class="val" id="vNoise">0.80</span></div>
+      <div class="row"><label>总步数</label><input id="sSteps" type="range" min="10" max="400" step="5" value="120"><span class="val" id="vSteps">120</span></div>
+      <div class="row"><label>动画速度</label><input id="sSpeed" type="range" min="1" max="30" step="1" value="10"><span class="val" id="vSpeed">10/s</span></div>
+      <div class="note" style="margin-top:4px">η 用对数滑杆（10⁻⁴ ~ 10⁰·³）。β 仅动量用；σ 仅带噪 SGD 用。</div>
+    </div>
+
+    <h2>③ 运行</h2>
+    <div class="card">
+      <div class="btnrow">
+        <button id="bRun">▶ 运行</button>
+        <button id="bStep">单步</button>
+        <button id="bReset">重置</button>
+      </div>
+      <div class="note" style="margin-top:8px">先在<b>左侧画布上点一下</b>设起点，再点「运行」。随时改 η / 优化器后重跑对比。</div>
+    </div>
+
+    <h2>④ 实时读数</h2>
+    <div class="card">
+      <div class="stat"><span>状态 <span id="oState" class="pill ok">就绪</span></span><span id="oStep">步 0 / 120</span></div>
+      <div class="stat"><span>当前坐标 (θ₁, θ₂)</span><span id="oPos">—</span></div>
+      <div class="stat"><span>当前损失 L(θ)</span><span id="oLoss">—</span></div>
+      <div class="stat"><span>梯度范数 ‖∇L‖</span><span id="oGrad">—</span></div>
+      <div class="stat"><span>最优损失 L*（参考）</span><span id="oMin">—</span></div>
+    </div>
+
+    <h2>⑤ 损失 vs 迭代曲线</h2>
+    <div class="card">
+      <canvas id="lossCv"></canvas>
+      <div class="note" id="lossNote" style="margin-top:6px">纵轴 = 损失 L（自动缩放，发散时切对数刻度）；横轴 = 迭代步。收敛 → 平滑下降至平台；震荡 → 锯齿；发散 → 飞向天花板。</div>
+    </div>
+
+    <h2>怎么读 · 该看什么（§4.2 / §4.3）</h2>
+    <div class="card note">
+      <p><b class="r">η 太大 → 发散 / 震荡</b>：把 η 拉到右端再跑凸碗，轨迹会越弹越远「蹦出画布」。沿一个方向，GD 是迭代 θ←θ−ηg；当 η 超过 2/L<sub>曲率</sub> 时步长过冲，每步都跨过谷底落到更高处，损失爆炸。</p>
+      <p><b class="o">η 太小 → 爬行</b>：把 η 拉到左端，轨迹一小步一小步，几百步还没到底——慢但稳。<b>调 η 是优化的第一要务</b>。</p>
+      <p><b class="v">病态峡谷 → GD 震荡，动量加速</b>：选「病态长峡谷」，两个方向曲率悬殊（条件数大）。GD 横跨窄谷来回弹、沿长轴爬得极慢；切到<b class="v">动量</b>，横向震荡被平均抵消、纵向速度累积，明显更快冲向谷底（§4.2.3）。</p>
+      <p><b class="g">非凸 → 起点决定命运</b>：选「非凸」，在<b>左半 / 右半</b>分别点起点运行，会落进<b>不同的局部极小</b>；把起点点在中间<b>鞍点</b>附近，梯度极小、轨迹近乎停滞——这正是深度网络非凸优化的缩影（§4.3.2）。</p>
+      <p><b class="c">带噪 SGD</b>：在真实梯度上加高斯噪声（模拟小批量 mini-batch 的随机性）。适度噪声能<b>逃离平坦鞍点 / 浅极小</b>、损失曲线带抖动；噪声过大则永远在谷底乱蹦不收敛（§4.2.2）。</p>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const lossCv = document.getElementById('lossCv');
+const lctx = lossCv.getContext('2d');
+const legendEl = document.getElementById('legend');
+const hintEl   = document.getElementById('hint');
+
+// ====================== 损失面定义（解析梯度） ======================
+// 每个面给出: f(x,y) -> 标量损失; g(x,y) -> [∂x,∂y]; view 视窗范围; min 最优值; minPts 极小坐标
+const SURFACES = {
+  // ① 凸碗：各向同性二次 0.5*(x^2+y^2)
+  bowl: {
+    name:'凸碗（各向同性二次）',
+    f:(x,y)=> 0.5*(x*x + y*y),
+    g:(x,y)=> [x, y],
+    view:{x0:-6,x1:6,y0:-6,y1:6},
+    min:0, minPts:[[0,0]],
+    note:'最简单的凸优化：处处朝向唯一全局极小，等高线是同心圆。GD 直奔圆心。把 η 拉大看它如何开始震荡甚至发散——这是理解"步长上限"的基准面。',
+    levels:[0.2,0.8,2,4,8,14,22,32]
+  },
+  // ② 病态长峡谷：0.5*(a*x^2 + b*y^2)，a<<b → 条件数大
+  valley: {
+    name:'病态长峡谷（条件数 ≈ 50）',
+    f:(x,y)=> 0.5*(0.04*x*x + 2.0*y*y),
+    g:(x,y)=> [0.04*x, 2.0*y],
+    view:{x0:-10,x1:10,y0:-3,y1:3},
+    min:0, minPts:[[0,0]],
+    note:'两方向曲率悬殊（0.04 vs 2.0，条件数≈50）：沿 y 又陡又窄、沿 x 又缓又长。普通 GD 在窄方向来回横跳、在长方向蜗行；动量沿谷底累积速度，碾压 GD。这就是病态（ill-conditioned）拖慢优化的本质（呼应《线性代数》第 9 章条件数）。',
+    levels:[0.05,0.2,0.5,1,2,4,8,14]
+  },
+  // ③ 非凸：两个高斯阱 + 一个鞍。用负高斯叠加构造双极小，中间形成鞍点
+  nonconvex: {
+    name:'非凸（双极小 + 鞍点）',
+    // 抬升的碗 + 两个负高斯井（左深右浅）→ 双极小，中间鞍
+    f:(x,y)=>{
+      const base = 0.06*(x*x + y*y);
+      const w1 = -3.2*Math.exp(-((x+3)*(x+3)+(y+1.4)*(y+1.4))/3.0); // 左阱（深）
+      const w2 = -2.5*Math.exp(-((x-3)*(x-3)+(y-1.4)*(y-1.4))/3.0); // 右阱（浅）
+      return base + w1 + w2 + 3.2;
+    },
+    g:(x,y)=>{
+      const gx0 = 0.12*x, gy0 = 0.12*y;
+      const e1 = Math.exp(-((x+3)*(x+3)+(y+1.4)*(y+1.4))/3.0);
+      const e2 = Math.exp(-((x-3)*(x-3)+(y-1.4)*(y-1.4))/3.0);
+      // d/dx[-A e^{-((x-cx)^2+...)/s}] = -A e * (-(2(x-cx))/s) = A e * 2(x-cx)/s
+      const gx1 =  3.2 * e1 * (2*(x+3)/3.0);
+      const gy1 =  3.2 * e1 * (2*(y+1.4)/3.0);
+      const gx2 =  2.5 * e2 * (2*(x-3)/3.0);
+      const gy2 =  2.5 * e2 * (2*(y-1.4)/3.0);
+      return [gx0+gx1+gx2, gy0+gy1+gy2];
+    },
+    view:{x0:-7,x1:7,y0:-5,y1:5},
+    // 真实极小（数值下降验证）：抬升碗把高斯阱中心拉偏约 0.2
+    min:null, minPts:[[-2.839,-1.325],[2.795,1.304]],
+    note:'两个高斯阱（左深右浅）夹一个鞍点。在画布左侧点起点 → 落入左深阱；右侧点起点 → 落入右浅阱；起点点在中央鞍点附近，梯度趋零、轨迹长时间停滞。非凸下"找到哪个极小"由起点 + 优化器 + 噪声共同决定，没有全局最优保证（§4.3.2）。',
+    levels:[0.4,0.8,1.4,2,2.6,3.2,4,5]
+  },
+  // ④ Rosenbrock 香蕉谷： (a-x)^2 + b*(y - x^2)^2
+  rosen: {
+    name:'Rosenbrock 香蕉谷',
+    a:1, b:6,
+    f:function(x,y){ return (this.a-x)*(this.a-x) + this.b*(y-x*x)*(y-x*x); },
+    g:function(x,y){
+      const dx = -2*(this.a-x) - 4*this.b*x*(y-x*x);
+      const dy =  2*this.b*(y-x*x);
+      return [dx, dy];
+    },
+    view:{x0:-2,x1:2,y0:-1,y1:3},
+    min:0, minPts:[[1,1]],
+    note:'优化的经典"魔鬼"测试：极小在 (1,1)，藏在一条弯曲狭长的香蕉形谷里。谷底曲率极不均匀，GD 进了谷就沿弯道极慢爬行、稍大 η 就甩出谷壁。最考验动量与自适应步长（Adam 等，§4.2.4 预告）。',
+    levels:[0.5,2,5,12,25,50,100,200]
+  }
+};
+
+// ====================== 状态 ======================
+let surfKey='bowl', optKey='gd';
+let S = SURFACES[surfKey];
+let eta=0.04, beta=0.9, noise=0.8, maxSteps=120, speed=10;
+let start=null;           // 起点 [x,y]（世界坐标），点击画布设置
+let traj=[];              // 轨迹点 [x,y]
+let lossHist=[];          // 损失历史
+let vel=[0,0];            // 动量速度
+let step=0, running=false, diverged=false, lastT=0;
+let rngState=12345;       // 自带可复现伪随机（避免依赖）
+
+// 画布几何
+let DPR=1,W=0,H=0;
+
+// ====================== 工具 ======================
+// 简单 LCG 伪随机 + Box-Muller 高斯（自包含，不用任何库）
+function rand(){ rngState=(rngState*1103515245+12345)&0x7fffffff; return rngState/0x7fffffff; }
+function gauss(){ let u=Math.max(1e-9,rand()), v=rand(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+function fmt(x,n){ n=(n==null?2:n); if(!isFinite(x))return '∞'; return (Math.abs(x)<1e-9?0:x).toFixed(n); }
+function clamp(x,a,b){ return Math.max(a,Math.min(b,x)); }
+
+// 世界 <-> 屏幕（按当前损失面 view 自适应铺满画布）
+function sx(x){ const v=S.view; return (x-v.x0)/(v.x1-v.x0)*W; }
+function sy(y){ const v=S.view; return H - (y-v.y0)/(v.y1-v.y0)*H; }
+function wx(px){ const v=S.view; return v.x0 + px/W*(v.x1-v.x0); }
+function wy(py){ const v=S.view; return v.y0 + (H-py)/H*(v.y1-v.y0); }
+
+// ====================== 画布尺寸 / DPR 适配 ======================
+function resize(){
+  DPR = window.devicePixelRatio||1;
+  const r = cv.getBoundingClientRect();
+  W=r.width; H=r.height;
+  cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  // 损失曲线画布
+  const lr=lossCv.getBoundingClientRect();
+  lossCv.width=Math.round(lr.width*DPR); lossCv.height=Math.round(lr.height*DPR);
+  lctx.setTransform(DPR,0,0,DPR,0,0);
+  draw();
+  drawLoss();
+}
+window.addEventListener('resize', resize);
+
+// ====================== 等高线着色（背景热力图 + 等高线） ======================
+let bgImage=null;        // 缓存的背景热力图 ImageData（损失面不变时复用）
+let bgKey='';
+
+function buildBackground(){
+  // 在低分辨率网格(SN×SN)上算损失并着色，存为小 ImageData；draw() 再用 drawImage 平滑放大铺底（避免逐像素重算 S.f）
+  const SN=140;                       // 低分辨率网格边长（远小于全屏像素数）
+  const img = ctx.createImageData(SN, SN);
+  // 先扫一遍求损失范围（用 gamma 压缩动态范围）
+  const samp=new Float64Array(SN*SN);
+  let lo=Infinity, hi=-Infinity;
+  for(let j=0;j<SN;j++){
+    const y=wy((j+0.5)/SN*H);
+    for(let i=0;i<SN;i++){
+      const x=wx((i+0.5)/SN*W);
+      let L=S.f.call(S,x,y); if(!isFinite(L))L=1e9;
+      samp[j*SN+i]=L; if(L<lo)lo=L; if(L>hi)hi=L;
+    }
+  }
+  const span=Math.max(1e-6, hi-lo);
+  for(let j=0;j<SN;j++){
+    for(let i=0;i<SN;i++){
+      let t=(samp[j*SN+i]-lo)/span;     // 0(低)~1(高)
+      t=Math.pow(clamp(t,0,1),0.42);    // gamma 压缩，让低谷区层次更丰富
+      // 深蓝(谷) → 紫 → 暖橙(高)。低处偏冷，高处偏暖
+      const r = 18 + t*210;
+      const g = 22 + t*78  + (1-t)*30;
+      const b = 46 + (1-t)*70 - t*10;
+      const idx=(j*SN+i)*4;
+      img.data[idx]   = clamp(r,0,255);
+      img.data[idx+1] = clamp(g,0,255);
+      img.data[idx+2] = clamp(b,0,255);
+      img.data[idx+3] = 255;
+    }
+  }
+  // 转成离屏 canvas 以便后续平滑缩放绘制
+  const off=document.createElement('canvas'); off.width=SN; off.height=SN;
+  off.getContext('2d').putImageData(img,0,0);
+  bgImage=off; bgKey=surfKey;
+}
+
+function drawContours(){
+  // 在像素网格上跑 marching-squares 的简化版：对每个等高线 level 用网格采样画线
+  const levels = S.levels;
+  const GN=90;                          // 等高线采样网格
+  const xs=[], ys=[];
+  for(let i=0;i<=GN;i++) xs.push(wx(i/GN*W));
+  for(let j=0;j<=GN;j++) ys.push(wy(j/GN*H));
+  // 预算网格损失
+  const F=[];
+  for(let j=0;j<=GN;j++){ const row=[]; for(let i=0;i<=GN;i++){ let L=S.f(xs[i],ys[j]); row.push(isFinite(L)?L:1e9);} F.push(row); }
+  ctx.save();
+  ctx.lineWidth=1;
+  for(let li=0;li<levels.length;li++){
+    const lev=levels[li];
+    ctx.strokeStyle='rgba(200,210,235,'+(0.10+0.05*((li%3)===0?1:0))+')';
+    ctx.beginPath();
+    for(let j=0;j<GN;j++){
+      for(let i=0;i<GN;i++){
+        // 单元四角值
+        const v00=F[j][i], v10=F[j][i+1], v11=F[j+1][i+1], v01=F[j+1][i];
+        // 屏幕坐标四角
+        const X0=i/GN*W, X1=(i+1)/GN*W, Y0=H-(j/GN*H), Y1=H-((j+1)/GN*H);
+        // marching squares：对四条边做线性插值找交点
+        const pts=[];
+        function edge(va,vb,ax,ay,bx,by){
+          if((va<lev)!==(vb<lev)){
+            const t=(lev-va)/((vb-va)||1e-9);
+            pts.push([ax+(bx-ax)*t, ay+(by-ay)*t]);
+          }
+        }
+        edge(v00,v10,X0,Y0,X1,Y0);  // 下边
+        edge(v10,v11,X1,Y0,X1,Y1);  // 右边
+        edge(v11,v01,X1,Y1,X0,Y1);  // 上边
+        edge(v01,v00,X0,Y1,X0,Y0);  // 左边
+        if(pts.length>=2){ ctx.moveTo(pts[0][0],pts[0][1]); ctx.lineTo(pts[1][0],pts[1][1]); }
+        if(pts.length===4){ ctx.moveTo(pts[2][0],pts[2][1]); ctx.lineTo(pts[3][0],pts[3][1]); }
+      }
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ====================== 主绘制 ======================
+function draw(){
+  if(W<2||H<2) return;
+  ctx.clearRect(0,0,W,H);
+  // 背景热力图（低分辨率缓存，按损失面 key 复用；放大平滑铺底）
+  if(!bgImage || bgKey!==surfKey){
+    buildBackground();
+  }
+  ctx.save(); ctx.imageSmoothingEnabled=true; ctx.drawImage(bgImage,0,0,W,H); ctx.restore();
+  // 等高线
+  drawContours();
+
+  // 极小点（紫色靶心）
+  S.minPts.forEach(p=>{
+    const X=sx(p[0]),Y=sy(p[1]);
+    ctx.beginPath(); ctx.arc(X,Y,7,0,7); ctx.strokeStyle='#b388ff'; ctx.lineWidth=2; ctx.stroke();
+    ctx.beginPath(); ctx.arc(X,Y,2.5,0,7); ctx.fillStyle='#b388ff'; ctx.fill();
+  });
+
+  // 轨迹（橙连线 + 逐点）
+  if(traj.length>0){
+    ctx.beginPath();
+    for(let i=0;i<traj.length;i++){
+      const X=sx(traj[i][0]),Y=sy(traj[i][1]);
+      i?ctx.lineTo(X,Y):ctx.moveTo(X,Y);
+    }
+    ctx.strokeStyle='rgba(245,166,35,.85)'; ctx.lineWidth=2; ctx.stroke();
+    // 逐点小圆
+    for(let i=0;i<traj.length;i++){
+      const X=sx(traj[i][0]),Y=sy(traj[i][1]);
+      ctx.beginPath(); ctx.arc(X,Y,2.2,0,7);
+      ctx.fillStyle = (i===0)?'#ffd166':'rgba(245,166,35,.7)'; ctx.fill();
+    }
+    // 当前点（大橙点）+ 当前负梯度箭头
+    const cur=traj[traj.length-1];
+    const cx=sx(cur[0]), cy=sy(cur[1]);
+    const g=S.g.call(S,cur[0],cur[1]);
+    const gn=Math.hypot(g[0],g[1]);
+    if(gn>1e-9 && isFinite(gn)){
+      // 负梯度方向，长度归一到屏幕固定长（仅示意方向）
+      const L=42;
+      const dx=-g[0]/gn, dy=-g[1]/gn;
+      const ex=cx + dx*L, ey=cy - dy*L;   // 注意 y 翻转
+      ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(ex,ey);
+      ctx.strokeStyle='#22c7d6'; ctx.lineWidth=2.5; ctx.stroke();
+      const ang=Math.atan2(ey-cy,ex-cx),hl=9;
+      ctx.beginPath(); ctx.moveTo(ex,ey);
+      ctx.lineTo(ex-hl*Math.cos(ang-0.4),ey-hl*Math.sin(ang-0.4));
+      ctx.lineTo(ex-hl*Math.cos(ang+0.4),ey-hl*Math.sin(ang+0.4));
+      ctx.closePath(); ctx.fillStyle='#22c7d6'; ctx.fill();
+    }
+    ctx.beginPath(); ctx.arc(cx,cy,5.5,0,7);
+    ctx.fillStyle = diverged?'#ef6b73':'#f5a623';
+    ctx.fill(); ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; ctx.stroke();
+  } else if(start){
+    const X=sx(start[0]),Y=sy(start[1]);
+    ctx.beginPath(); ctx.arc(X,Y,6,0,7); ctx.fillStyle='#ffd166'; ctx.fill();
+    ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; ctx.stroke();
+  }
+
+  // 发散提示
+  if(diverged){
+    ctx.fillStyle='rgba(239,107,115,.9)'; ctx.font='600 14px system-ui'; ctx.textAlign='center';
+    ctx.fillText('发散！η 太大 → 损失爆炸（轨迹蹦出损失面）', W/2, 26);
+    ctx.textAlign='left';
+  }
+}
+
+// ====================== 损失曲线 ======================
+function drawLoss(){
+  const w=lossCv.getBoundingClientRect().width, h=lossCv.getBoundingClientRect().height;
+  lctx.clearRect(0,0,w,h);
+  const pad=6, bottom=h-14, top=8, left=4, right=w-4;
+  // 轴
+  lctx.strokeStyle='rgba(200,210,235,.18)'; lctx.lineWidth=1;
+  lctx.beginPath(); lctx.moveTo(left,top); lctx.lineTo(left,bottom); lctx.lineTo(right,bottom); lctx.stroke();
+  if(lossHist.length<1){
+    lctx.fillStyle='#9aa0b4'; lctx.font='12px system-ui';
+    lctx.fillText('点起点并运行后，这里画 损失 L vs 迭代步', 10, h/2);
+    return;
+  }
+  // 值范围（损失可能跨多个数量级 → 用 log(L - Lmin + ε)）
+  let vals = lossHist.map(L=> isFinite(L)?L:1e12);
+  // 参考最优损失：取解析/采样值与轨迹实测最小值的较小者，避免 log 取负数→NaN
+  let Lref = (S.min!=null)?S.min:Math.min(...S.minPts.map(p=>S.f.call(S,p[0],p[1])));
+  Lref = Math.min(Lref, Math.min(...vals)) - 1e-6;
+  let useLog=false;
+  let mx=Math.max(...vals), mn=Math.min(...vals);
+  if(mx/Math.max(1e-9,Math.abs(mn)+1e-9) > 50 || mx>1e3){ useLog=true; }
+  function ty(L){
+    if(useLog){
+      const a=Math.log10(Math.max(1e-6, L-Lref+1e-6));
+      const lo=Math.log10(Math.max(1e-6, mn-Lref+1e-6)), hi=Math.log10(Math.max(1e-6, mx-Lref+1e-6));
+      const t=(a-lo)/((hi-lo)||1);
+      return bottom-(t)*(bottom-top);
+    } else {
+      const t=(L-mn)/((mx-mn)||1);
+      return bottom-t*(bottom-top);
+    }
+  }
+  // 曲线
+  lctx.beginPath();
+  for(let i=0;i<vals.length;i++){
+    const X=left+(right-left)*(vals.length<=1?0:i/(vals.length-1));
+    const Y=clamp(ty(vals[i]),top,bottom);
+    i?lctx.lineTo(X,Y):lctx.moveTo(X,Y);
+  }
+  lctx.strokeStyle='#22c7d6'; lctx.lineWidth=2; lctx.stroke();
+  // 当前点
+  const i=vals.length-1;
+  const X=left+(right-left)*(vals.length<=1?0:i/(vals.length-1));
+  const Y=clamp(ty(vals[i]),top,bottom);
+  lctx.beginPath(); lctx.arc(X,Y,3.2,0,7); lctx.fillStyle=diverged?'#ef6b73':'#f5a623'; lctx.fill();
+  // 标注
+  lctx.fillStyle='#9aa0b4'; lctx.font='11px system-ui';
+  lctx.fillText(useLog?'log 刻度':'线性刻度', right-58, top+10);
+}
+
+// ====================== 一步优化 ======================
+function gradStep(){
+  if(traj.length===0 || diverged) return;
+  const cur=traj[traj.length-1];
+  let g=S.g.call(S, cur[0], cur[1]);
+  // 带噪 SGD：在梯度上加高斯噪声（模拟小批量随机性）
+  if(optKey==='sgd' && noise>0){
+    g=[g[0]+gauss()*noise, g[1]+gauss()*noise];
+  }
+  let nx, ny;
+  if(optKey==='mom'){
+    // 重球动量：v ← βv − η g ; θ ← θ + v
+    vel[0]=beta*vel[0] - eta*g[0];
+    vel[1]=beta*vel[1] - eta*g[1];
+    nx=cur[0]+vel[0]; ny=cur[1]+vel[1];
+  } else {
+    // GD / SGD：θ ← θ − η g
+    nx=cur[0]-eta*g[0]; ny=cur[1]-eta*g[1];
+  }
+  step++;
+  // 健壮性：NaN / 越界 → 判定发散
+  if(!isFinite(nx)||!isFinite(ny)||Math.abs(nx)>1e6||Math.abs(ny)>1e6){
+    diverged=true; running=false;
+    traj.push([clamp(nx,-1e6,1e6), clamp(ny,-1e6,1e6)]);
+    lossHist.push(1e12);
+    finish(); return;
+  }
+  traj.push([nx,ny]);
+  let L=S.f.call(S,nx,ny); if(!isFinite(L))L=1e12;
+  lossHist.push(L);
+  // 损失爆炸也算发散
+  const startL = lossHist.length? lossHist[0]:1;
+  if(L>1e8 || (L>Math.abs(startL)*1e4 && L>1e4)){
+    diverged=true; running=false; finish();
+  }
+}
+
+// ====================== 动画循环 ======================
+function loop(t){
+  if(!running) return;
+  const interval = 1000/speed;
+  if(t-lastT >= interval){
+    lastT=t;
+    gradStep();
+    if(step>=maxSteps){ running=false; finish(); }
+    update();
+  }
+  if(running) requestAnimationFrame(loop);
+}
+function setRun(on){
+  if(on){
+    if(traj.length===0){
+      if(!start){ flashHint(); return; }
+      beginRun();
+    }
+    running=true; lastT=0; bRun.textContent='⏸ 暂停'; bRun.classList.add('active');
+    requestAnimationFrame(loop);
+  } else {
+    running=false; bRun.textContent='▶ 运行'; bRun.classList.remove('active');
+  }
+}
+function finish(){ running=false; bRun.textContent='▶ 运行'; bRun.classList.remove('active'); update(); }
+
+function beginRun(){
+  traj=[ [start[0],start[1]] ];
+  let L0=S.f.call(S,start[0],start[1]); if(!isFinite(L0))L0=1e12;
+  lossHist=[L0];
+  vel=[0,0]; step=0; diverged=false; rngState=(Math.floor(Math.random()*1e7)+1);
+}
+
+// ====================== 读数面板 ======================
+function update(){
+  vEta.textContent=fmt(eta,4); vBeta.textContent=fmt(beta,2);
+  vNoise.textContent=fmt(noise,2); vSteps.textContent=maxSteps; vSpeed.textContent=speed+'/s';
+  oStep.textContent='步 '+step+' / '+maxSteps;
+  const Lref=(S.min!=null)?S.min:Math.min(...S.minPts.map(p=>S.f.call(S,p[0],p[1])));
+  oMin.textContent=fmt(Lref,3);
+
+  if(traj.length>0){
+    const cur=traj[traj.length-1];
+    oPos.textContent='('+fmt(cur[0],2)+', '+fmt(cur[1],2)+')';
+    const L=lossHist[lossHist.length-1];
+    oLoss.textContent = L>=1e8?'∞ (发散)':fmt(L,3);
+    const g=S.g.call(S,cur[0],cur[1]); const gn=Math.hypot(g[0],g[1]);
+    oGrad.textContent = isFinite(gn)?fmt(gn,3):'∞';
+    // 状态判定
+    if(diverged){ oState.textContent='发散'; oState.className='pill bad'; }
+    else if(step>=maxSteps){
+      // 看是否接近某极小
+      let near=Infinity; S.minPts.forEach(p=>{ near=Math.min(near, Math.hypot(cur[0]-p[0],cur[1]-p[1])); });
+      if(gn<0.05 || near<0.4){ oState.textContent='收敛'; oState.className='pill ok'; }
+      else { oState.textContent='未到底'; oState.className='pill warn'; }
+    } else if(running){ oState.textContent='运行中'; oState.className='pill warn'; }
+    else { oState.textContent='暂停'; oState.className='pill warn'; }
+  } else {
+    oPos.textContent = start?('起点 ('+fmt(start[0],2)+', '+fmt(start[1],2)+')'):'—';
+    oLoss.textContent='—'; oGrad.textContent='—';
+    oState.textContent= start?'就绪':'点画布设起点'; oState.className='pill ok';
+  }
+  draw(); drawLoss();
+}
+
+// ====================== 交互 ======================
+// 点击画布设起点
+cv.addEventListener('pointerdown',e=>{
+  const r=cv.getBoundingClientRect();
+  const px=e.clientX-r.left, py=e.clientY-r.top;
+  start=[ clamp(wx(px),S.view.x0,S.view.x1), clamp(wy(py),S.view.y0,S.view.y1) ];
+  setRun(false);
+  traj=[]; lossHist=[]; step=0; diverged=false; vel=[0,0];
+  update();
+});
+
+// 损失面预设
+document.querySelectorAll('.presets button').forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll('.presets button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    surfKey=b.dataset.s; S=SURFACES[surfKey];
+    bgImage=null; start=null; traj=[]; lossHist=[]; step=0; diverged=false; vel=[0,0];
+    setRun(false);
+    surfNote.textContent=S.note;
+    update();
+  };
+});
+
+// 优化器
+document.querySelectorAll('.opts button').forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll('.opts button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    optKey=b.dataset.o;
+    setRun(false);
+    // 改优化器后从起点重跑
+    if(start){ traj=[]; lossHist=[]; step=0; diverged=false; vel=[0,0]; }
+    update();
+  };
+});
+
+// 滑杆：η 用对数刻度（滑杆值是 log10(η)）
+sEta.oninput=e=>{ eta=Math.pow(10, +e.target.value); update(); };
+sBeta.oninput=e=>{ beta=+e.target.value; update(); };
+sNoise.oninput=e=>{ noise=+e.target.value; update(); };
+sSteps.oninput=e=>{ maxSteps=+e.target.value; update(); };
+sSpeed.oninput=e=>{ speed=+e.target.value; update(); };
+
+// 按钮
+bRun.onclick=()=> setRun(!running);
+bStep.onclick=()=>{
+  setRun(false);
+  if(traj.length===0){ if(!start){ flashHint(); return; } beginRun(); }
+  if(step<maxSteps && !diverged){ gradStep(); }
+  update();
+};
+bReset.onclick=()=>{
+  setRun(false); traj=[]; lossHist=[]; step=0; diverged=false; vel=[0,0]; update();
+};
+
+function flashHint(){
+  hintEl.style.color='#ef6b73';
+  setTimeout(()=>{ hintEl.style.color=''; }, 900);
+}
+
+// ====================== 图例 / 提示 ======================
+legendEl.innerHTML =
+  '<div><span class="dot" style="background:#ffd166"></span><b style="color:#ffd166">起点</b>（点击画布设置）</div>'+
+  '<div><span class="ln" style="border-color:#f5a623"></span><b style="color:#f5a623">下降轨迹</b> θ₀→θ₁→… &nbsp;<span class="dot" style="background:#f5a623"></span>当前点</div>'+
+  '<div><span class="ln" style="border-color:#22c7d6"></span><b style="color:#22c7d6">−∇L 方向</b>（当前负梯度）</div>'+
+  '<div><span class="dot" style="background:#b388ff"></span><b style="color:#b388ff">极小点</b>（target）</div>'+
+  '<div style="margin-top:3px">背景色：<b style="color:#3a5">深</b>=低损失谷 → <b style="color:#f5a623">暖</b>=高损失；白线=等高线</div>';
+hintEl.innerHTML='操作提示（§4.2 / §4.3）：① <b>点画布设起点</b> → 选优化器 → 调 η → 点「<b>运行</b>」看轨迹；② 病态峡谷里对比 <b>GD vs 动量</b>；③ 非凸地形换不同起点看落进<b style="color:#b388ff">不同极小</b>；④ 把 η 拉大看<b style="color:#ef6b73">发散</b>。';
+
+// 初始化
+S=SURFACES[surfKey];
+surfNote.textContent=S.note;
+resize();
+update();
+</script>
+</body>
+</html>

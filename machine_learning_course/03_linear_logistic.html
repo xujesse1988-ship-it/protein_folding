@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>线性回归 + 逻辑回归决策边界 —— 配套第 3 章</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a24; --panel2:#1f2330; --line:#2b3040;
+    --text:#e7e9f0; --dim:#9aa0b4;
+    --orange:#f5a623;  /* 拟合直线 / 类别 A */
+    --cyan:#22c7d6;    /* 数据点 / 类别 B */
+    --yellow:#ffd166;  /* 决策边界 / 高亮 */
+    --violet:#b388ff;  /* 多项式曲线 / 正则后 */
+    --red:#ef6b73;     /* 残差 / 误分类 / 警示 */
+    --green:#7bd88f;   /* 命中 / 正确 */
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;}
+  header{padding:13px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{margin:0;font-size:18px;letter-spacing:.3px}
+  header h1 .c{color:var(--cyan)} header h1 .o{color:var(--orange)}
+  header p{margin:5px 0 0;color:var(--dim);font-size:13px;line-height:1.65}
+  header p b{color:#fff}
+  .wrap{display:flex;height:calc(100% - 86px);min-height:0}
+  .stage{position:relative;flex:1 1 auto;min-width:0;overflow:hidden;
+    background:radial-gradient(circle at 48% 46%,#161a26 0%,#0d0f15 84%)}
+  #cv{display:block;width:100%;height:100%;cursor:crosshair}
+  .legend{position:absolute;left:14px;top:12px;font-size:12.5px;pointer-events:none;
+    background:rgba(15,17,23,.62);padding:8px 11px;border-radius:8px;border:1px solid var(--line);line-height:1.95}
+  .legend .ln{display:inline-block;width:18px;height:0;border-top:3px solid;margin-right:6px;vertical-align:middle}
+  .legend .dn{display:inline-block;width:18px;height:0;border-top:3px dashed;margin-right:6px;vertical-align:middle}
+  .legend .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:middle}
+  .hint{position:absolute;left:14px;bottom:12px;color:var(--dim);font-size:12px;pointer-events:none;
+    background:rgba(15,17,23,.55);padding:6px 10px;border-radius:8px;border:1px solid var(--line);max-width:600px;line-height:1.6}
+  .panel{flex:0 0 430px;max-width:55%;overflow-y:auto;border-left:1px solid var(--line);background:var(--panel);padding:16px}
+  .panel h2{font-size:14px;margin:18px 0 8px;color:#fff}
+  .panel h2:first-child{margin-top:0}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+  button{background:#262b3a;color:var(--text);border:1px solid var(--line);border-radius:8px;
+    padding:7px 11px;font-size:13px;cursor:pointer}
+  button:hover{filter:brightness(1.13)}
+  button.active{background:#2f3a4f;border-color:var(--cyan);color:#fff}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .row{display:flex;align-items:center;gap:10px;margin:9px 0}
+  .row label{flex:0 0 96px;font-weight:600;font-size:13px}
+  input[type=range]{flex:1 1 auto;accent-color:var(--cyan)}
+  .val{flex:0 0 60px;text-align:right;font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px}
+  .stat{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px dashed #2b3040}
+  .stat:last-child{border-bottom:none}
+  .stat span:last-child{color:#fff;font-variant-numeric:tabular-nums}
+  .note{font-size:12.5px;color:var(--dim);line-height:1.85}
+  .note b{color:#e7e9f0}
+  .note .o{color:var(--orange)} .note .c{color:var(--cyan)} .note .y{color:var(--yellow)}
+  .note .v{color:var(--violet)} .note .r{color:var(--red)} .note .g{color:var(--green)}
+  code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#cdd6f4}
+  .presets{display:flex;flex-wrap:wrap;gap:6px}
+  .presets button{flex:1 1 30%;font-size:12px;padding:6px 4px}
+  .btnrow{display:flex;gap:8px;margin-top:6px}
+  .btnrow button{flex:1 1 0}
+  .modebar{display:flex;gap:8px;margin-bottom:4px}
+  .modebar button{flex:1 1 0;padding:9px 6px;font-size:13.5px;font-weight:600}
+  .toggles{display:flex;flex-wrap:wrap;gap:10px;font-size:12.5px}
+  .toggles label{display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--dim)}
+  .toggles input{accent-color:var(--cyan)}
+  .pill{display:inline-block;padding:1px 8px;border-radius:6px;font-size:12px;font-weight:600;margin-left:6px}
+  .pill.lin{background:rgba(245,166,35,.16);color:var(--orange)}
+  .pill.log{background:rgba(34,199,214,.16);color:var(--cyan)}
+  .classbtns{display:flex;gap:8px}
+  .classbtns button{flex:1 1 0}
+  .classbtns button.cA.active{background:rgba(245,166,35,.22);border-color:var(--orange);color:#fff}
+  .classbtns button.cB.active{background:rgba(34,199,214,.22);border-color:var(--cyan);color:#fff}
+  .hide{display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="o">线性回归</span> + <span class="c">逻辑回归</span>决策边界 · 把「最小二乘几何」与「线性分类器」看活</h1>
+  <p>左画布拖 / 增 / 删数据点，右侧实时拟合并显示<b>系数 · 损失 · 正则</b>。<b style="color:var(--orange)">回归模式</b>：最小二乘 (least squares) 拟合直线 / 多项式，红色<b>残差竖线</b>就是被平方求和的那一段；拉大 L2 正则强度 λ 看曲线<b>变平滑</b>。<b style="color:var(--cyan)">分类模式</b>：梯度下降训练逻辑回归 (logistic regression)，画出 <b>sigmoid 概率热力背景</b>与<b style="color:var(--yellow)">决策边界</b>——它<b>永远是一条直线</b>（线性分类器，决策边界 = 超平面）。配套《机器学习与深度学习深度入门》第 3 章 §3.1 线性回归 / 岭回归、§3.3 逻辑回归与决策边界。暗线回响：平方损失 = 高斯噪声 MLE、交叉熵 = 伯努利 MLE、L2 正则 = 高斯先验 MAP（见《概率与统计》第 7、8 章）。</p>
+</header>
+<div class="wrap">
+  <div class="stage">
+    <canvas id="cv"></canvas>
+    <div class="legend" id="legend"></div>
+    <div class="hint" id="hint"></div>
+  </div>
+  <div class="panel">
+
+    <h2>模式切换</h2>
+    <div class="card">
+      <div class="modebar">
+        <button id="bmReg" class="active">① 线性回归 (regression)</button>
+        <button id="bmCls">② 逻辑回归 (classification)</button>
+      </div>
+      <div class="note" id="modeNote"></div>
+    </div>
+
+    <!-- ============ 线性回归面板 ============ -->
+    <div id="panReg">
+      <h2>拟合控制（§3.1）</h2>
+      <div class="card">
+        <div class="row"><label>多项式阶数 d</label><input id="sDeg" type="range" min="1" max="9" step="1" value="1"><span class="val" id="vDeg">1</span></div>
+        <div class="row"><label>L2 正则 λ</label><input id="sLam" type="range" min="0" max="3" step="0.02" value="0"><span class="val" id="vLam">0.00</span></div>
+        <div class="note">阶数 d=1 是直线（最小二乘 = 正规方程 / 投影，见《线性代数》第 4、5 章）；d 越大假设空间越大、越能拐弯但越易<span class="r">过拟合</span>。岭回归 (ridge) 在损失上加 <code>λ·Σwⱼ²</code> 惩罚大系数 ⇒ 曲线<span class="v">变平滑</span>（λ→∞ 趋于水平线）。</div>
+        <div class="toggles" style="margin-top:9px">
+          <label><input type="checkbox" id="tResid" checked> 显示残差竖线</label>
+          <label><input type="checkbox" id="tCoef"> 标注系数</label>
+        </div>
+      </div>
+
+      <h2>拟合读数（实时）</h2>
+      <div class="card">
+        <div class="stat"><span>样本数 n</span><span id="oNreg">0</span></div>
+        <div class="stat"><span>MSE = 均方误差 (mean squared error)</span><span id="oMse">—</span></div>
+        <div class="stat"><span>RMSE = √MSE（与 y 同量纲）</span><span id="oRmse">—</span></div>
+        <div class="stat"><span>R² = 决定系数 (1−SS_res/SS_tot)</span><span id="oR2">—</span></div>
+        <div class="stat"><span>‖w‖²（系数能量，正则惩罚的量）</span><span id="oWnorm">—</span></div>
+        <div class="note" id="oCoefTxt" style="margin-top:8px"></div>
+      </div>
+
+      <h2>预设数据（§3.1）</h2>
+      <div class="card">
+        <div class="presets">
+          <button data-p="line">含噪直线</button>
+          <button data-p="quad">二次曲线</button>
+          <button data-p="sine">正弦波</button>
+          <button data-p="outlier">含离群点</button>
+          <button data-p="few">少样本</button>
+          <button data-p="clear">清空</button>
+        </div>
+        <div class="note" style="margin-top:9px">
+          <p><b class="r">必玩 1·过拟合</b>：选「正弦波」，把阶数 d 推到 8–9，曲线会<b>穿过几乎每个点</b>但在点之间剧烈震荡——训练误差→0 而泛化糟糕（暗线一·泛化）。</p>
+          <p><b class="v">必玩 2·正则救场</b>：保持高阶，把 <b>λ 从 0 慢慢拉大</b>，曲线被「拽平」、震荡消失（偏差↑、方差↓，见配套 <code>02_bias_variance.html</code>）。</p>
+          <p><b class="o">必玩 3·离群点</b>：选「含离群点」，最小二乘对<b>大残差异常敏感</b>（残差被平方），一个离群点能把直线整体掰歪。</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 逻辑回归面板 ============ -->
+    <div id="panCls" class="hide">
+      <h2>当前落点类别</h2>
+      <div class="card">
+        <div class="classbtns">
+          <button id="bClsA" class="cA active">点 = 类别 A（橙·y=0）</button>
+          <button id="bClsB" class="cB">点 = 类别 B（青·y=1）</button>
+        </div>
+        <div class="note" style="margin-top:8px">点击画布空白处<b>添加</b>当前类别的点；点中已有点可<b>拖动</b>；右键 / 双击删除。逻辑回归学一条<b class="y">直线决策边界</b>把两类分开。</div>
+      </div>
+
+      <h2>训练控制：梯度下降（§3.3 / 第 4 章）</h2>
+      <div class="card">
+        <div class="row"><label>学习率 η</label><input id="sEta" type="range" min="0.02" max="2" step="0.02" value="0.5"><span class="val" id="vEta">0.50</span></div>
+        <div class="row"><label>L2 正则 λ</label><input id="sLamC" type="range" min="0" max="2" step="0.01" value="0"><span class="val" id="vLamC">0.00</span></div>
+        <div class="btnrow">
+          <button id="bStep">单步梯度下降 ×5</button>
+          <button id="bPlay">▶ 自动训练</button>
+          <button id="bResetW">重置权重</button>
+        </div>
+        <div class="note" style="margin-top:8px">目标 = 交叉熵 (cross-entropy) 损失 + <code>λ‖w‖²</code>。逻辑 / 交叉熵是<b>凸问题</b>，梯度下降会稳定收敛到全局最优（见第 4 章；与神经网络的非凸不同）。加大 λ 把权重往 0 拉 ⇒ 边界变「软」、斜率变缓。</div>
+      </div>
+
+      <h2>模型读数（实时）</h2>
+      <div class="card">
+        <div class="stat"><span>迭代步数 k</span><span id="oIter">0</span></div>
+        <div class="stat"><span>权重 w = (w₁, w₂)</span><span id="oW">0.00, 0.00</span></div>
+        <div class="stat"><span>偏置 b (bias)</span><span id="oB">0.00</span></div>
+        <div class="stat"><span>交叉熵损失 (cross-entropy)</span><span id="oCE">—</span></div>
+        <div class="stat"><span>训练准确率 (accuracy)</span><span id="oAcc">—</span></div>
+        <div class="stat"><span>误分类点数</span><span id="oMis">—</span></div>
+        <div class="note" id="oClsTxt" style="margin-top:8px"></div>
+      </div>
+
+      <h2>预设数据（§3.3）</h2>
+      <div class="card">
+        <div class="presets">
+          <button data-pc="blobs">两团（线性可分）</button>
+          <button data-pc="overlap">重叠（不可分）</button>
+          <button data-pc="diag">对角分界</button>
+          <button data-pc="xor">异或 (XOR)</button>
+          <button data-pc="clearc">清空</button>
+        </div>
+        <div class="note" style="margin-top:9px">
+          <p><b class="g">必玩 1·线性可分</b>：选「两团」点自动训练，边界稳稳分开两类，准确率→100%、损失→0。</p>
+          <p><b class="r">必玩 2·重叠</b>：选「重叠」，两类纠缠 ⇒ 无论怎么训练都<b>无法 100% 分对</b>，损失收敛到正值（线性模型容量不足，暗线三·归纳偏置）。</p>
+          <p><b class="r">必玩 3·异或</b>：选「异或」，四个对角块——<b>没有任何一条直线能分开</b>它！这正是单层线性分类器的著名极限（需要非线性 / 核 / 神经网络，见第 5、7 章）。</p>
+        </div>
+      </div>
+    </div>
+
+    <h2>怎么读这张图</h2>
+    <div class="card note" id="readme"></div>
+
+  </div>
+</div>
+
+<script>
+"use strict";
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const legendEl = document.getElementById('legend');
+const hintEl   = document.getElementById('hint');
+
+/* ====================== 全局状态 ====================== */
+let mode = 'reg';                 // 'reg' | 'cls'
+let DPR=1,W=0,H=0;
+// 世界坐标范围（数据空间）。回归: x∈[-5,5], y∈[-5,5]; 分类: 同
+const XMIN=-5, XMAX=5, YMIN=-5, YMAX=5;
+
+// 回归数据：[{x,y}]
+let regPts = [];
+let deg = 1, lamR = 0;
+let regCoef = [];                 // 多项式系数 [w0,w1,...,wd]
+// 分类数据：[{x,y,c}] c∈{0,1}
+let clsPts = [];
+let curClass = 0;                 // 当前落点类别
+let w1=0, w2=0, b=0;              // 逻辑回归参数（含偏置）
+let etaC=0.5, lamC=0;
+let iter=0;
+let playing=false, lastPlayT=0;
+
+// 拖动状态
+let dragIdx=-1, dragArr=null, moved=false, downX=0, downY=0;
+
+/* ====================== 画布尺寸 / DPR ====================== */
+function resize(){
+  DPR = window.devicePixelRatio||1;
+  const r = cv.getBoundingClientRect();
+  W=r.width; H=r.height;
+  cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  draw();
+}
+window.addEventListener('resize', resize);
+
+// 世界 <-> 屏幕（带内边距）
+const PAD=44;
+function sx(x){ return PAD + (x-XMIN)/(XMAX-XMIN)*(W-2*PAD); }
+function sy(y){ return (H-PAD) - (y-YMIN)/(YMAX-YMIN)*(H-2*PAD); }
+function wx(px){ return XMIN + (px-PAD)/(W-2*PAD)*(XMAX-XMIN); }
+function wy(py){ return YMIN + ((H-PAD)-py)/(H-2*PAD)*(YMAX-YMIN); }
+function clampX(x){ return Math.max(XMIN,Math.min(XMAX,x)); }
+function clampY(y){ return Math.max(YMIN,Math.min(YMAX,y)); }
+function fmt(x,p){ p=p==null?2:p; return (Math.abs(x)<1e-9?0:x).toFixed(p); }
+
+/* ====================== 线性代数小工具 ====================== */
+// 解线性方程组 (A x = bvec)，A 为 m×m，用带部分主元的高斯消元（稳健）
+function solve(A, bvec){
+  const m=A.length;
+  // 复制
+  const M=A.map((r,i)=>r.concat([bvec[i]]));
+  for(let col=0; col<m; col++){
+    // 部分主元
+    let piv=col;
+    for(let r=col+1;r<m;r++) if(Math.abs(M[r][col])>Math.abs(M[piv][col])) piv=r;
+    if(Math.abs(M[piv][col])<1e-12) continue;     // 近奇异，跳过（靠正则保证可解）
+    [M[col],M[piv]]=[M[piv],M[col]];
+    const pv=M[col][col];
+    for(let c=col;c<=m;c++) M[col][c]/=pv;
+    for(let r=0;r<m;r++){
+      if(r===col) continue;
+      const f=M[r][col];
+      if(f===0) continue;
+      for(let c=col;c<=m;c++) M[r][c]-=f*M[col][c];
+    }
+  }
+  return M.map(r=>r[m]);
+}
+
+/* ====================== 线性回归：岭多项式拟合 ====================== */
+// 设计矩阵特征向量 [1, x, x^2, ..., x^d]（对 x 缩放以保数值稳定）
+const XSCALE=3;                                   // x/XSCALE 后再取幂，抑制高阶溢出
+function phi(x, d){
+  const xs=x/XSCALE, f=new Array(d+1);
+  let p=1;
+  for(let j=0;j<=d;j++){ f[j]=p; p*=xs; }
+  return f;
+}
+// 正规方程：(ΦᵀΦ + λ I') w = Φᵀ y ，I' 不惩罚截距项（j=0）
+function fitReg(){
+  const n=regPts.length;
+  const D=Math.min(deg,9);
+  regCoef=[];
+  if(n===0){ return; }
+  const p=D+1;
+  const ATA=Array.from({length:p},()=>new Array(p).fill(0));
+  const ATy=new Array(p).fill(0);
+  for(const pt of regPts){
+    const f=phi(pt.x, D);
+    for(let i=0;i<p;i++){
+      ATy[i]+=f[i]*pt.y;
+      for(let j=0;j<p;j++) ATA[i][j]+=f[i]*f[j];
+    }
+  }
+  // L2 正则（岭），不惩罚截距 j=0；按样本数 n 归一化（与 ATA 同量纲，使 λ 在样本多少时口径一致），额外加极小 jitter 防全奇异
+  for(let j=0;j<p;j++) ATA[j][j]+= (j===0?0:lamR*n) + 1e-8;
+  regCoef=solve(ATA, ATy);
+}
+function predReg(x){
+  if(!regCoef.length) return 0;
+  const f=phi(x, regCoef.length-1);
+  let s=0; for(let j=0;j<regCoef.length;j++) s+=regCoef[j]*f[j];
+  return s;
+}
+function regStats(){
+  const n=regPts.length;
+  if(n===0) return {n:0,mse:NaN,rmse:NaN,r2:NaN,wn:NaN};
+  let ss=0, ybar=0;
+  for(const pt of regPts) ybar+=pt.y; ybar/=n;
+  let sstot=0;
+  for(const pt of regPts){ const e=pt.y-predReg(pt.x); ss+=e*e; sstot+=(pt.y-ybar)*(pt.y-ybar); }
+  const mse=ss/n;
+  const r2 = sstot>1e-9 ? 1-ss/sstot : (ss<1e-9?1:0);
+  let wn=0; for(let j=1;j<regCoef.length;j++) wn+=regCoef[j]*regCoef[j];  // 不含截距
+  return {n, mse, rmse:Math.sqrt(mse), r2, wn};
+}
+
+/* ====================== 逻辑回归：梯度下降 ====================== */
+function sigmoid(z){
+  if(z>=0){ const e=Math.exp(-z); return 1/(1+e); }
+  const e=Math.exp(z); return e/(1+e);            // 数值稳定
+}
+function predProb(x,y){ return sigmoid(w1*x + w2*y + b); }
+// 一步梯度下降（全批量），目标 = 平均交叉熵 + λ‖w‖²
+function gdStep(){
+  const n=clsPts.length;
+  if(n===0) return;
+  let g1=0,g2=0,gb=0;
+  for(const pt of clsPts){
+    const p=predProb(pt.x, pt.y);
+    const err=p - pt.c;                            // dL/dz （交叉熵 + sigmoid 的优雅梯度）
+    g1+=err*pt.x; g2+=err*pt.y; gb+=err;
+  }
+  g1/=n; g2/=n; gb/=n;
+  g1+=2*lamC*w1; g2+=2*lamC*w2;                    // L2 正则梯度（不罚偏置）
+  w1-=etaC*g1; w2-=etaC*g2; b-=etaC*gb;
+  // 防 NaN / 爆炸
+  if(!isFinite(w1)||!isFinite(w2)||!isFinite(b)){ w1=w2=b=0; }
+  iter++;
+}
+function clsStats(){
+  const n=clsPts.length;
+  if(n===0) return {n:0,ce:NaN,acc:NaN,mis:0};
+  let ce=0, correct=0, mis=0;
+  for(const pt of clsPts){
+    let p=predProb(pt.x, pt.y);
+    p=Math.max(1e-12, Math.min(1-1e-12, p));
+    ce += -(pt.c*Math.log(p) + (1-pt.c)*Math.log(1-p));
+    const pred = p>=0.5 ? 1 : 0;
+    if(pred===pt.c) correct++; else mis++;
+  }
+  ce += lamC*(w1*w1+w2*w2);
+  return {n, ce:ce/n, acc:correct/n, mis};
+}
+
+/* ====================== 绘图基元 ====================== */
+function gridAndAxes(){
+  ctx.lineWidth=1;
+  for(let g=-5; g<=5; g++){
+    ctx.strokeStyle='rgba(120,130,160,.07)';
+    ctx.beginPath(); ctx.moveTo(sx(g),sy(YMIN)); ctx.lineTo(sx(g),sy(YMAX)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(sx(XMIN),sy(g)); ctx.lineTo(sx(XMAX),sy(g)); ctx.stroke();
+  }
+  ctx.strokeStyle='rgba(200,210,235,.20)';
+  ctx.beginPath(); ctx.moveTo(sx(XMIN),sy(0)); ctx.lineTo(sx(XMAX),sy(0)); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(sx(0),sy(YMIN)); ctx.lineTo(sx(0),sy(YMAX)); ctx.stroke();
+  // 轴标签
+  ctx.fillStyle='rgba(154,160,180,.8)'; ctx.font='12px system-ui';
+  ctx.fillText('x', sx(XMAX)-14, sy(0)-7);
+  ctx.fillText('y', sx(0)+7, sy(YMAX)+14);
+}
+function dot(x,y,col,r,stroke){
+  ctx.beginPath(); ctx.arc(sx(x),sy(y), r||5, 0, 7);
+  ctx.fillStyle=col; ctx.fill();
+  if(stroke){ ctx.lineWidth=1.5; ctx.strokeStyle=stroke; ctx.stroke(); }
+}
+
+/* ====================== 主绘制 ====================== */
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  if(mode==='reg') drawReg(); else drawCls();
+}
+
+function drawReg(){
+  gridAndAxes();
+  fitReg();
+  // 残差竖线（先画，垫在下面）
+  if(tResid.checked){
+    for(const pt of regPts){
+      const yh=predReg(pt.x);
+      ctx.beginPath(); ctx.moveTo(sx(pt.x),sy(pt.y)); ctx.lineTo(sx(pt.x),sy(yh));
+      ctx.strokeStyle='rgba(239,107,115,.65)'; ctx.lineWidth=2; ctx.stroke();
+    }
+  }
+  // 拟合曲线（裁剪到画布内；用真实 sy，让超出范围处仍连续）
+  if(regPts.length>0){
+    const steps=240;
+    ctx.save(); ctx.beginPath();
+    ctx.rect(PAD-2,2,W-2*PAD+4,H-4); ctx.clip();    // 裁到画布内
+    ctx.beginPath();
+    for(let i=0;i<=steps;i++){
+      const x=XMIN+(XMAX-XMIN)*i/steps;
+      const Yr=sy(predReg(x));
+      if(i===0) ctx.moveTo(sx(x),Yr); else ctx.lineTo(sx(x),Yr);
+    }
+    ctx.lineWidth=2.6; ctx.strokeStyle=(deg===1?'#f5a623':'#b388ff'); ctx.stroke();
+    ctx.restore();
+  }
+  // 数据点
+  for(let i=0;i<regPts.length;i++){
+    const pt=regPts[i];
+    dot(pt.x, pt.y, '#22c7d6', 6, 'rgba(15,17,23,.9)');
+    if(tCoef.checked){ /* 系数标注走面板 */ }
+  }
+}
+
+function drawCls(){
+  // sigmoid 概率热力背景（橙→青渐变）：用低分辨率块填充再叠网格
+  const cols=64, rows=40;
+  const cw=(W-2*PAD)/cols, ch=(H-2*PAD)/rows;
+  const hasModel=(w1!==0||w2!==0||b!==0);
+  for(let i=0;i<cols;i++){
+    for(let j=0;j<rows;j++){
+      const x=XMIN+(XMAX-XMIN)*(i+0.5)/cols;
+      const y=YMAX-(YMAX-YMIN)*(j+0.5)/rows;
+      const p = hasModel ? predProb(x,y) : 0.5;     // p=P(类别B/青)
+      // 橙(A,p→0) → 青(B,p→1)
+      const a=Math.round(245+(34-245)*p), g=Math.round(166+(199-166)*p), bb=Math.round(35+(214-35)*p);
+      const alpha=0.10+0.16*Math.abs(p-0.5)*2;       // 离边界越远越浓
+      ctx.fillStyle='rgba('+a+','+g+','+bb+','+alpha.toFixed(3)+')';
+      ctx.fillRect(PAD+i*cw, PAD+j*ch, cw+1, ch+1);
+    }
+  }
+  gridAndAxes();
+  // 决策边界 w1*x + w2*y + b = 0  （恒为直线）
+  if(hasModel){
+    let p0,p1;
+    if(Math.abs(w2)>Math.abs(w1)){
+      // y = -(w1 x + b)/w2
+      p0=[XMIN, -(w1*XMIN+b)/w2]; p1=[XMAX, -(w1*XMAX+b)/w2];
+    } else if(Math.abs(w1)>1e-9){
+      p0=[-(w2*YMIN+b)/w1, YMIN]; p1=[-(w2*YMAX+b)/w1, YMAX];
+    } else { p0=p1=null; }
+    if(p0){
+      ctx.save(); ctx.beginPath(); ctx.rect(PAD,PAD,W-2*PAD,H-2*PAD); ctx.clip();
+      ctx.beginPath(); ctx.moveTo(sx(p0[0]),sy(p0[1])); ctx.lineTo(sx(p1[0]),sy(p1[1]));
+      ctx.lineWidth=3; ctx.strokeStyle='#ffd166'; ctx.stroke();
+      ctx.restore();
+    }
+  }
+  // 数据点（橙=A/0，青=B/1），误分类加红圈
+  for(const pt of clsPts){
+    const col = pt.c===0 ? '#f5a623' : '#22c7d6';
+    let stroke='rgba(15,17,23,.9)';
+    if(hasModel){
+      const pred = predProb(pt.x,pt.y)>=0.5 ? 1 : 0;
+      if(pred!==pt.c) stroke='#ef6b73';
+    }
+    dot(pt.x, pt.y, col, 6, stroke);
+    if(hasModel){
+      const pred = predProb(pt.x,pt.y)>=0.5 ? 1 : 0;
+      if(pred!==pt.c){
+        ctx.beginPath(); ctx.arc(sx(pt.x),sy(pt.y),9,0,7);
+        ctx.lineWidth=2; ctx.strokeStyle='#ef6b73'; ctx.stroke();
+      }
+    }
+  }
+}
+
+/* ====================== 面板读数 ====================== */
+function update(){
+  if(mode==='reg'){
+    fitReg();
+    const s=regStats();
+    oNreg.textContent=s.n;
+    oMse.textContent = s.n? fmt(s.mse):'—';
+    oRmse.textContent= s.n? fmt(s.rmse):'—';
+    oR2.textContent  = s.n? fmt(s.r2):'—';
+    oWnorm.textContent=s.n? fmt(s.wn):'—';
+    // 系数文本
+    if(s.n){
+      let parts=regCoef.map((c,j)=> 'w'+j+'='+fmt(c));
+      oCoefTxt.innerHTML = '系数（对 x/'+XSCALE+' 的多项式）：<code>'+parts.join(', ')+'</code>';
+    } else oCoefTxt.textContent='添加数据点开始拟合。';
+  } else {
+    const s=clsStats();
+    oIter.textContent=iter;
+    oW.textContent = fmt(w1)+', '+fmt(w2);
+    oB.textContent = fmt(b);
+    oCE.textContent = s.n? fmt(s.ce,3):'—';
+    oAcc.textContent= s.n? (fmt(s.acc*100,1)+'%'):'—';
+    oMis.textContent= s.n? s.mis:'—';
+    // 类别计数 + 解说
+    let nA=0,nB=0; for(const pt of clsPts){ if(pt.c===0)nA++; else nB++; }
+    let txt='';
+    if(s.n===0) txt='点击画布添加两类点，再点「自动训练」。';
+    else if(nA===0||nB===0) txt='<span class="r">只有一个类别</span>——逻辑回归需要两类才能学边界。';
+    else {
+      const sl = Math.abs(w1)>1e-9 ? -w1/w2 : Infinity;
+      txt='决策边界方程：<code>'+fmt(w1)+'·x + '+fmt(w2)+'·y + '+fmt(b)+' = 0</code>（永远是直线）。';
+      if(s.mis===0 && s.n>0) txt+=' <span class="g">已 100% 分对</span>，损失仍会随训练继续下降（边界越推越自信）。';
+      else txt+=' <span class="r">仍有 '+s.mis+' 个误分类</span>：若两类线性不可分（如重叠 / 异或），这是直线分类器的固有极限（暗线三）。';
+    }
+    oClsTxt.innerHTML=txt;
+  }
+  draw();
+}
+
+/* ====================== 模式切换 ====================== */
+function setMode(m){
+  mode=m;
+  bmReg.classList.toggle('active', m==='reg');
+  bmCls.classList.toggle('active', m==='cls');
+  panReg.classList.toggle('hide', m!=='reg');
+  panCls.classList.toggle('hide', m!=='cls');
+  if(playing) setPlay(false);
+  setLegendHint();
+  setReadme();
+  modeNote.innerHTML = m==='reg'
+    ? '<span class="o">回归</span>：拟合连续 y。最小二乘 = 让<b class="r">残差</b>平方和最小（几何上 = 把 y 投影到特征张成的子空间，《线性代数》第 4、5 章）。'
+    : '<span class="c">分类</span>：预测离散类别。逻辑回归把线性打分 <code>w·x+b</code> 过 <b>sigmoid</b> 变概率，<b class="y">决策边界 = 概率 0.5 的那条直线（超平面）</b>。';
+  update();
+}
+bmReg.onclick=()=>setMode('reg');
+bmCls.onclick=()=>setMode('cls');
+
+/* ====================== 自动训练循环 ====================== */
+function setPlay(on){
+  playing=on && mode==='cls';
+  bPlay.textContent = playing ? '⏸ 暂停训练' : '▶ 自动训练';
+  bPlay.classList.toggle('active', playing);
+  if(playing){ lastPlayT=0; requestAnimationFrame(loop); }
+}
+function loop(t){
+  if(!playing) return;
+  if(t-lastPlayT>30){ lastPlayT=t; for(let k=0;k<3;k++) gdStep(); update(); }
+  requestAnimationFrame(loop);
+}
+bStep.onclick=()=>{ if(playing)setPlay(false); for(let k=0;k<5;k++) gdStep(); update(); };
+bPlay.onclick=()=> setPlay(!playing);
+bResetW.onclick=()=>{ w1=w2=b=0; iter=0; if(playing)setPlay(false); update(); };
+
+/* ====================== 类别按钮 ====================== */
+bClsA.onclick=()=>{ curClass=0; bClsA.classList.add('active'); bClsB.classList.remove('active'); };
+bClsB.onclick=()=>{ curClass=1; bClsB.classList.add('active'); bClsA.classList.remove('active'); };
+
+/* ====================== 回归滑块 ====================== */
+sDeg.oninput=e=>{ deg=+e.target.value; vDeg.textContent=deg; update(); };
+sLam.oninput=e=>{ lamR=+e.target.value; vLam.textContent=fmt(lamR); update(); };
+tResid.onchange=draw; tCoef.onchange=update;
+// 分类滑块
+sEta.oninput=e=>{ etaC=+e.target.value; vEta.textContent=fmt(etaC); };
+sLamC.oninput=e=>{ lamC=+e.target.value; vLamC.textContent=fmt(lamC); update(); };
+
+/* ====================== 鼠标 / 触摸交互 ====================== */
+function pickPt(arr, px, py){
+  for(let i=arr.length-1;i>=0;i--){
+    if(Math.hypot(px-sx(arr[i].x), py-sy(arr[i].y))<12) return i;
+  }
+  return -1;
+}
+cv.addEventListener('pointerdown', e=>{
+  const r=cv.getBoundingClientRect(), px=e.clientX-r.left, py=e.clientY-r.top;
+  downX=px; downY=py; moved=false;
+  const arr = mode==='reg' ? regPts : clsPts;
+  // 右键删除
+  if(e.button===2){ const i=pickPt(arr,px,py); if(i>=0){ arr.splice(i,1); afterEdit(); } return; }
+  const i=pickPt(arr,px,py);
+  if(i>=0){ dragIdx=i; dragArr=arr; cv.setPointerCapture(e.pointerId); }
+  else { dragIdx=-1; }
+});
+cv.addEventListener('pointermove', e=>{
+  if(dragIdx<0) return;
+  const r=cv.getBoundingClientRect(), px=e.clientX-r.left, py=e.clientY-r.top;
+  if(Math.hypot(px-downX,py-downY)>3) moved=true;
+  dragArr[dragIdx].x=clampX(wx(px));
+  dragArr[dragIdx].y=clampY(wy(py));
+  afterEdit();
+});
+cv.addEventListener('pointerup', e=>{
+  const r=cv.getBoundingClientRect(), px=e.clientX-r.left, py=e.clientY-r.top;
+  if(dragIdx<0 && e.button===0 && !moved){
+    // 空白点击 = 添加点
+    if(mode==='reg') regPts.push({x:clampX(wx(px)), y:clampY(wy(py))});
+    else clsPts.push({x:clampX(wx(px)), y:clampY(wy(py)), c:curClass});
+    afterEdit();
+  }
+  dragIdx=-1; dragArr=null;
+});
+cv.addEventListener('pointerleave', ()=>{ dragIdx=-1; dragArr=null; });
+cv.addEventListener('contextmenu', e=>e.preventDefault());
+// 双击删除（触屏友好备选）
+cv.addEventListener('dblclick', e=>{
+  const r=cv.getBoundingClientRect(), px=e.clientX-r.left, py=e.clientY-r.top;
+  const arr = mode==='reg' ? regPts : clsPts;
+  const i=pickPt(arr,px,py); if(i>=0){ arr.splice(i,1); afterEdit(); }
+});
+function afterEdit(){
+  // 编辑分类数据时，权重保留但建议重训；这里只刷新读数（不自动训练，留给用户）
+  update();
+}
+
+/* ====================== 预设数据 ====================== */
+function rnd(a,b){ return a+Math.random()*(b-a); }
+function gauss(){ let u=0,v=0; while(u===0)u=Math.random(); while(v===0)v=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+
+document.querySelectorAll('.presets button[data-p]').forEach(btn=>{
+  btn.onclick=()=>{
+    const p=btn.dataset.p; regPts=[];
+    if(p==='line'){ for(let i=0;i<14;i++){ const x=rnd(-4.2,4.2); regPts.push({x, y:clampY(0.8*x-0.5+gauss()*0.8)}); } }
+    else if(p==='quad'){ for(let i=0;i<14;i++){ const x=rnd(-4,4); regPts.push({x, y:clampY(0.3*x*x-2+gauss()*0.6)}); } }
+    else if(p==='sine'){ for(let i=0;i<16;i++){ const x=rnd(-4.5,4.5); regPts.push({x, y:clampY(3*Math.sin(x*0.9)+gauss()*0.4)}); } }
+    else if(p==='outlier'){ for(let i=0;i<11;i++){ const x=rnd(-4,4); regPts.push({x, y:clampY(0.7*x+gauss()*0.5)}); } regPts.push({x:3.5,y:-4.2}); regPts.push({x:-3.2,y:4.4}); }
+    else if(p==='few'){ regPts=[{x:-3,y:-2.4},{x:-1,y:-1},{x:1,y:1.2},{x:3,y:2.6}]; }
+    else if(p==='clear'){ regPts=[]; }
+    update();
+  };
+});
+document.querySelectorAll('.presets button[data-pc]').forEach(btn=>{
+  btn.onclick=()=>{
+    const p=btn.dataset.pc; clsPts=[];
+    const add=(cx,cy,sd,c,n)=>{ for(let i=0;i<n;i++) clsPts.push({x:clampX(cx+gauss()*sd), y:clampY(cy+gauss()*sd), c}); };
+    if(p==='blobs'){ add(-2.2,1.8,0.8,0,12); add(2.2,-1.8,0.8,1,12); }
+    else if(p==='overlap'){ add(-1.0,0.6,1.3,0,14); add(1.0,-0.6,1.3,1,14); }
+    else if(p==='diag'){ add(-2.4,-2.4,0.9,0,12); add(2.4,2.4,0.9,1,12); }
+    else if(p==='xor'){ add(-2.4,2.4,0.7,0,7); add(2.4,-2.4,0.7,0,7); add(2.4,2.4,0.7,1,7); add(-2.4,-2.4,0.7,1,7); }
+    else if(p==='clearc'){ clsPts=[]; }
+    w1=w2=b=0; iter=0; if(playing)setPlay(false);
+    update();
+  };
+});
+
+/* ====================== 图例 / 提示 / 说明 ====================== */
+function setLegendHint(){
+  if(mode==='reg'){
+    legendEl.innerHTML =
+      '<div><span class="dot" style="background:#22c7d6"></span><b style="color:var(--cyan)">数据点 (x,y)</b>（拖动 / 点空白增 / 右键删）</div>'+
+      '<div><span class="ln" style="border-color:var(--orange)"></span>拟合直线 (d=1)&nbsp; <span class="ln" style="border-color:var(--violet)"></span>多项式 (d≥2)</div>'+
+      '<div><span class="ln" style="border-color:var(--red)"></span><b style="color:var(--red)">残差</b>=被平方求和的误差</div>';
+    hintEl.innerHTML='操作提示（§3.1）：点空白<b>加点</b>、拖点<b>移动</b>、右键 / 双击<b>删除</b>；推高<b>阶数 d</b> 看过拟合，拉大 <b>λ</b> 看曲线被正则「拽平」。';
+  } else {
+    legendEl.innerHTML =
+      '<div><span class="dot" style="background:#f5a623"></span><b style="color:var(--orange)">类别 A (y=0)</b> &nbsp; <span class="dot" style="background:#22c7d6"></span><b style="color:var(--cyan)">类别 B (y=1)</b></div>'+
+      '<div><span class="ln" style="border-color:var(--yellow)"></span><b style="color:var(--yellow)">决策边界</b>（P=0.5，恒为直线）</div>'+
+      '<div><span class="dot" style="background:transparent;border:2px solid #ef6b73;width:10px;height:10px"></span><b style="color:var(--red)">误分类点</b>（红圈）</div>'+
+      '<div>背景渐变 = <b style="color:var(--orange)">P(A)</b> ↔ <b style="color:var(--cyan)">P(B)</b> 的 sigmoid 概率</div>';
+    hintEl.innerHTML='操作提示（§3.3）：选好<b>当前类别</b>后点空白<b>加点</b>；<b style="color:var(--yellow)">加 / 移点后需再点「自动训练」</b>，否则边界仍是旧权重、新点可能瞬间显示为误分类红圈；试「<b>异或</b>」预设——没有直线能分开它（线性分类器的极限）。';
+  }
+}
+function setReadme(){
+  const el=document.getElementById('readme');
+  if(mode==='reg'){
+    el.innerHTML=
+      '<p><b>最小二乘几何</b>：拟合曲线在每个样本处与真实 y 的竖直差就是<span class="r">残差</span>；最小二乘选的曲线让 <code>Σ残差²</code> 最小。几何上等价于把目标向量 <b>y 正交投影</b>到设计矩阵 Φ 的列空间（《线性代数》第 4 章投影、第 5 章正规方程 / 最小二乘）。</p>'+
+      '<p><b>阶数 = 容量</b>：d 是假设空间大小。低阶<span class="o">欠拟合</span>（偏差大）、高阶<span class="r">过拟合</span>（方差大）——这正是<b>偏差-方差权衡</b>（暗线一，详见 <code>02_bias_variance.html</code>）。</p>'+
+      '<p><b>岭回归 (ridge)</b>：损失加 <code>λΣwⱼ²</code>。<span class="g">概率视角</span>：等价于给系数加<b>高斯先验</b>做 MAP 估计（《概率与统计》第 8 章）；λ 越大先验越强、系数越被拉向 0、曲线越平滑。</p>'+
+      '<p><b>R²</b> 越接近 1 拟合越好（=1 完美穿过，可能是过拟合的信号！）。<b>别用训练 R² 当泛化指标</b>——需留出测试集（常见陷阱）。</p>';
+  } else {
+    el.innerHTML=
+      '<p><b>逻辑回归 = 线性分类器</b>：模型是 <code>P(y=1|x)=σ(w·x+b)</code>。判 1 当 P≥0.5 ⇔ <code>w·x+b≥0</code>，所以<b class="y">决策边界恒是直线 / 超平面</b>——无论数据多弯，它只能画直线（暗线三·归纳偏置）。这是和神经网络（第 7 章）最本质的区别。</p>'+
+      '<p><b>目标 = 交叉熵</b>：<code>−Σ[y logp+(1−y)log(1−p)]</code>。<span class="g">概率视角</span>：这就是伯努利分布的<b>负对数似然</b>（MLE，《概率与统计》第 7 章；交叉熵 = KL+熵，《信息论》第 3、4 章）。它对 (w,b) <b>凸</b>，梯度下降必达全局最优。</p>'+
+      '<p><b>梯度的优雅</b>：sigmoid+交叉熵让梯度退化成 <code>(p−y)·x</code>（预测误差 × 输入）——和线性回归同形，这不是巧合（指数族 + 正则联系）。</p>'+
+      '<p><b>L2 正则</b>：加 <code>λ‖w‖²</code> 把权重往 0 收，边界斜率变缓、避免过自信；λ 太大则欠拟合。对应<b>高斯先验</b>的 MAP。</p>';
+  }
+}
+
+/* ====================== 初始化 ====================== */
+function init(){
+  // 默认回归数据：含噪直线
+  for(let i=0;i<12;i++){ const x=rnd(-4,4); regPts.push({x, y:clampY(0.8*x-0.3+gauss()*0.7)}); }
+  // 默认分类数据：两团
+  const add=(cx,cy,sd,c,n)=>{ for(let i=0;i<n;i++) clsPts.push({x:clampX(cx+gauss()*sd), y:clampY(cy+gauss()*sd), c}); };
+  add(-2.2,1.8,0.8,0,12); add(2.2,-1.8,0.8,1,12);
+  resize();
+  setMode('reg');
+}
+init();
+</script>
+</body>
+</html>

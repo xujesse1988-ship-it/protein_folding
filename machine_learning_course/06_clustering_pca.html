@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>K-means 聚类 + PCA 降维 · 无监督学习的两面 —— 配套第 6 章</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a24; --panel2:#1f2330; --line:#2b3040;
+    --text:#e7e9f0; --dim:#9aa0b4;
+    --orange:#f5a623;  /* 质心 / 第一主轴 PC1 */
+    --cyan:#22c7d6;    /* 第二主轴 PC2 / 投影 */
+    --yellow:#ffd166;  /* 簇 3 / 强调 */
+    --violet:#b388ff;  /* 簇 4 */
+    --red:#ef6b73;     /* 失败 / 警示 / 簇 5 */
+    --green:#7bd88f;   /* 收敛命中 / 簇 1 */
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;}
+  header{padding:13px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{margin:0;font-size:18px;letter-spacing:.3px}
+  header h1 .c{color:var(--cyan)} header h1 .o{color:var(--orange)}
+  header p{margin:5px 0 0;color:var(--dim);font-size:13px;line-height:1.65}
+  header p b{color:#fff}
+  .wrap{display:flex;height:calc(100% - 86px);min-height:0}
+  .stage{position:relative;flex:1 1 auto;min-width:0;overflow:hidden;
+    background:radial-gradient(circle at 48% 46%,#161a26 0%,#0d0f15 84%)}
+  #cv{display:block;width:100%;height:100%;cursor:crosshair}
+  .legend{position:absolute;left:14px;top:12px;font-size:12.5px;pointer-events:none;
+    background:rgba(15,17,23,.62);padding:8px 11px;border-radius:8px;border:1px solid var(--line);line-height:1.95}
+  .legend .ln{display:inline-block;width:18px;height:0;border-top:3px solid;margin-right:6px;vertical-align:middle}
+  .legend .dn{display:inline-block;width:18px;height:0;border-top:3px dashed;margin-right:6px;vertical-align:middle}
+  .legend .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:middle}
+  .legend .x{display:inline-block;width:12px;text-align:center;margin-right:5px;font-weight:700;vertical-align:middle}
+  .hint{position:absolute;left:14px;bottom:12px;color:var(--dim);font-size:12px;pointer-events:none;
+    background:rgba(15,17,23,.55);padding:6px 10px;border-radius:8px;border:1px solid var(--line);max-width:620px;line-height:1.6}
+  .panel{flex:0 0 430px;max-width:55%;overflow-y:auto;border-left:1px solid var(--line);background:var(--panel);padding:16px}
+  .panel h2{font-size:14px;margin:18px 0 8px;color:#fff}
+  .panel h2:first-child{margin-top:0}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+  button{background:#262b3a;color:var(--text);border:1px solid var(--line);border-radius:8px;
+    padding:7px 11px;font-size:13px;cursor:pointer}
+  button:hover{filter:brightness(1.13)}
+  button.active{background:#2f3a4f;border-color:var(--cyan);color:#fff}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .row{display:flex;align-items:center;gap:10px;margin:9px 0}
+  .row label{flex:0 0 78px;font-weight:600;font-size:13px}
+  input[type=range]{flex:1 1 auto;accent-color:var(--cyan)}
+  .val{flex:0 0 56px;text-align:right;font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px}
+  .stat{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px dashed #2b3040}
+  .stat:last-child{border-bottom:none}
+  .stat span:last-child{color:#fff;font-variant-numeric:tabular-nums}
+  .note{font-size:12.5px;color:var(--dim);line-height:1.85}
+  .note b{color:#e7e9f0}
+  .note .o{color:var(--orange)} .note .c{color:var(--cyan)} .note .y{color:var(--yellow)}
+  .note .v{color:var(--violet)} .note .r{color:var(--red)} .note .g{color:var(--green)}
+  code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#cdd6f4}
+  .presets{display:flex;flex-wrap:wrap;gap:6px}
+  .presets button{flex:1 1 30%;font-size:12px;padding:6px 4px}
+  .btnrow{display:flex;gap:8px;margin-top:6px}
+  .btnrow button{flex:1 1 0}
+  .modebar{display:flex;gap:8px;margin-bottom:14px}
+  .modebar button{flex:1 1 0;font-size:13.5px;padding:9px 6px;font-weight:600}
+  .toggles{display:flex;flex-wrap:wrap;gap:10px;font-size:12.5px}
+  .toggles label{display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--dim)}
+  .toggles input{accent-color:var(--cyan)}
+  .pill{display:inline-block;padding:1px 8px;border-radius:6px;font-size:12px;font-weight:600;margin-left:6px}
+  .pill.ok{background:rgba(123,216,143,.16);color:var(--green)}
+  .pill.run{background:rgba(245,166,35,.16);color:var(--orange)}
+  .pill.warn{background:rgba(239,107,115,.16);color:var(--red)}
+  .bar{height:9px;border-radius:5px;background:#2b3040;overflow:hidden;margin:4px 0}
+  .bar > i{display:block;height:100%}
+  .hide{display:none !important}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="o">K-means 聚类</span> + <span class="c">PCA 降维</span> · 无监督学习如何「自己找结构」</h1>
+  <p>没有标签，只有一堆点。<b>K-means</b> 反复「就近归簇 → 重算质心」（Lloyd 迭代）把点切成 k 团，看它<b>怎样收敛、对初始化多敏感、在弯月 / 环上如何失败</b>；<b>PCA</b> 对协方差矩阵做特征分解，找出方差最大的<b>主轴</b>并把点投影降维。两者都在回答本课暗线：<b>归纳偏置</b>（K-means 假设球状等方差簇、PCA 假设方差大 = 信息多）决定你能发现什么结构。配套《机器学习与深度学习深度入门》第 6 章「无监督学习」§6.1（K-means/EM）与 §6.3（PCA）。</p>
+</header>
+<div class="wrap">
+  <div class="stage">
+    <canvas id="cv"></canvas>
+    <div class="legend" id="legend"></div>
+    <div class="hint" id="hint"></div>
+  </div>
+  <div class="panel">
+
+    <div class="modebar">
+      <button id="mKM" class="active">① K-means 聚类</button>
+      <button id="mPCA">② PCA 降维</button>
+    </div>
+
+    <!-- ============ K-means 面板 ============ -->
+    <div id="panelKM">
+      <h2>点云预设（决定 K-means 成败）</h2>
+      <div class="card">
+        <div class="presets">
+          <button data-d="blobs" class="active">分离团块</button>
+          <button data-d="overlap">重叠团块</button>
+          <button data-d="aniso">拉长椭圆</button>
+          <button data-d="moons">两弯月</button>
+          <button data-d="ring">同心环</button>
+          <button data-d="uniform">均匀无结构</button>
+        </div>
+        <div class="note" style="margin-top:8px"><b class="r">弯月 / 同心环 / 拉长椭圆</b>专门用来演示 <b>K-means 失败</b>：它的归纳偏置是「簇=球状、各向同性、大小相近」，几何不符时硬切就出错（§6.1.3）。</div>
+      </div>
+
+      <h2>参数与迭代</h2>
+      <div class="card">
+        <div class="row"><label>簇数 k</label><input id="sK" type="range" min="1" max="6" step="1" value="3"><span class="val" id="vK">3</span></div>
+        <div class="row"><label>点数 n</label><input id="sN" type="range" min="60" max="600" step="20" value="300"><span class="val" id="vN">300</span></div>
+        <div class="btnrow">
+          <button id="bStep">单步 ▸</button>
+          <button id="bPlay">▶ 自动运行</button>
+        </div>
+        <div class="btnrow">
+          <button id="bReinit">↻ 重新随机初始化</button>
+          <button id="bNewData">⤳ 重新生成点云</button>
+        </div>
+        <div class="note" style="margin-top:8px">「单步」分两小步动画：<b class="c">① 指派</b>（每点连到最近质心）→ <b class="o">② 更新</b>（质心移到簇均值）。多按几次「重新随机初始化」会看到<b>收敛到不同结果</b>——这就是初始化敏感（§6.1.2）。</div>
+      </div>
+
+      <h2>实时状态</h2>
+      <div class="card">
+        <div class="stat"><span>当前阶段</span><span id="oPhase">等待初始化</span></div>
+        <div class="stat"><span>Lloyd 迭代轮次</span><span id="oRound">0</span></div>
+        <div class="stat"><span>簇内平方和 SSE（越小越紧）</span><span id="oSSE">—</span></div>
+        <div class="stat"><span>本轮有点改簇？</span><span id="oChanged">—</span></div>
+        <div class="stat"><span>空簇修复</span><span id="oEmpty">—</span></div>
+        <div class="stat"><span>收敛状态</span><span id="oConv" class="pill run">迭代中</span></div>
+        <div class="note" id="oSSEhist" style="margin-top:8px"></div>
+      </div>
+
+      <h2>K-means 是什么（三件套）</h2>
+      <div class="card note">
+        <p><b>表示</b>：k 个质心 + 硬指派，把空间切成 <b>Voronoi 多边形</b>（每点归最近质心）。<b>目标</b>：最小化簇内平方和 SSE = Σ‖xᵢ−μ_{c(i)}‖²。<b>优化</b>：Lloyd 算法交替两步——固定质心求最优指派、固定指派求最优质心（= 簇均值）。每步都不增大 SSE，故必收敛，但只到<b>局部最优</b>（§6.1.1）。</p>
+        <p><b class="o">质心 = 簇均值</b>正是「平方误差下的最优代表点」，这与最小二乘同源（见《线性代数》第 4/5 章投影 / 正规方程）。</p>
+        <p><b class="g">概率视角</b>：K-means ≈ 各向同性、等方差、协方差→0 极限下的高斯混合模型 GMM 的硬指派 EM（§6.2）。所以它隐含「球状簇」假设。</p>
+        <p><b class="r">诚实的边界</b>：① 需预先定 k；② 非球状 / 不等大小簇会切错；③ 对初始化与离群点敏感（实践用 k-means++ 初始化 + 多次重启取最小 SSE）。</p>
+      </div>
+    </div>
+
+    <!-- ============ PCA 面板 ============ -->
+    <div id="panelPCA" class="hide">
+      <h2>2D 相关点云</h2>
+      <div class="card">
+        <div class="row"><label>相关性 ρ</label><input id="pRho" type="range" min="-0.97" max="0.97" step="0.01" value="0.8"><span class="val" id="vRho">0.80</span></div>
+        <div class="row"><label>x 方差</label><input id="pVx" type="range" min="0.3" max="3" step="0.05" value="2.2"><span class="val" id="vVx">2.20</span></div>
+        <div class="row"><label>y 方差</label><input id="pVy" type="range" min="0.3" max="3" step="0.05" value="0.8"><span class="val" id="vVy">0.80</span></div>
+        <div class="row"><label>点数 n</label><input id="pN" type="range" min="60" max="500" step="20" value="240"><span class="val" id="vPN">240</span></div>
+        <div class="btnrow">
+          <button id="pNewData">⤳ 重新采样</button>
+        </div>
+        <div class="toggles" style="margin-top:8px">
+          <label><input type="checkbox" id="tProj" checked> 显示投影脚（到 PC1）</label>
+          <label><input type="checkbox" id="tCentered"> 显示去均值坐标</label>
+        </div>
+      </div>
+
+      <h2>谱分解结果（协方差 → 特征）</h2>
+      <div class="card">
+        <div class="stat"><span>样本协方差 Cov[x,x]</span><span id="oCxx">—</span></div>
+        <div class="stat"><span>样本协方差 Cov[x,y]</span><span id="oCxy">—</span></div>
+        <div class="stat"><span>样本协方差 Cov[y,y]</span><span id="oCyy">—</span></div>
+        <div class="stat"><span>特征值 λ₁（PC1 方差）</span><span id="oL1">—</span></div>
+        <div class="stat"><span>特征值 λ₂（PC2 方差）</span><span id="oL2">—</span></div>
+        <div class="stat"><span>PC1 方向（特征向量）</span><span id="oV1">—</span></div>
+        <div class="stat"><span>PC1 解释方差比</span><span id="oEVR1">—</span></div>
+        <div class="bar"><i id="barEVR" style="background:var(--orange)"></i></div>
+        <div class="stat"><span>PC2 解释方差比</span><span id="oEVR2">—</span></div>
+      </div>
+
+      <h2>PCA 是什么（三件套）</h2>
+      <div class="card note">
+        <p><b>表示</b>：一组<b>正交</b>主轴（主成分 principal components），按所携方差从大到小排。<b>目标</b>：找投影方向使<b>投影后方差最大</b>（等价于<b>重构误差最小</b>，毕达哥拉斯）。<b>优化</b>：对样本<b>协方差矩阵做特征分解</b>，<b class="o">PC1</b>=最大特征值的特征向量。</p>
+        <p><b class="c">三句等价</b>：<b>PCA = 协方差矩阵的特征分解 = 去均值数据矩阵的奇异值分解 SVD</b>。本页对 2×2 协方差用闭式特征分解（与左侧特征值探索器同一套数学）。降维 = 只留前几根主轴的坐标，丢掉小方差方向（见《线性代数》第 8 章 SVD/PCA、第 7 章谱定理）。</p>
+        <p><b>主轴长度</b> ∝ √λ（标准差），所以画出的两根轴长度比 = √(λ₁/λ₂)；轴越长 = 该方向数据越「铺得开」。<b class="c">注</b>：画面里两轴一律放大 2×（画到 ±2√λ）仅为肉眼可见，<b>比例不变</b>，别拿尺子量绝对长度。</p>
+        <p><b class="r">诚实的边界</b>：PCA 只抓<b>线性</b>方向、且把「方差大」当「重要」——若信息藏在小方差里、或结构是弯曲的（如左边的弯月），PCA 会丢掉它，要用核 PCA / t-SNE / 自编码器（§6.4）。</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+"use strict";
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const legendEl = document.getElementById('legend');
+const hintEl   = document.getElementById('hint');
+
+let mode = 'KM';                 // 'KM' | 'PCA'
+let DPR=1,W=0,H=0,cx=0,cy=0,scale=60;
+
+// 簇配色（与 CSS 变量呼应）
+const CL = ['#7bd88f','#22c7d6','#ffd166','#b388ff','#ef6b73','#f5a623'];
+
+// ============ 通用随机（带种子，保证可复现的“重新初始化”可控） ============
+let seed = 1234567;
+function rnd(){ // xorshift32
+  seed ^= seed<<13; seed^=seed>>>17; seed^=seed<<5; seed>>>=0;
+  return seed/4294967296;
+}
+function gauss(){ // Box–Muller
+  let u=0,v=0; while(u<1e-9)u=rnd(); v=rnd();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+}
+
+// ============ 画布尺寸 / DPR 适配 ============
+function resize(){
+  DPR = window.devicePixelRatio||1;
+  const r = cv.getBoundingClientRect();
+  W=r.width; H=r.height;
+  cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  cx=W/2; cy=H/2;
+  scale=Math.max(34, Math.min(W,H)/9.0);   // 像素/单位
+  draw();
+}
+window.addEventListener('resize', resize);
+
+function sx(x){ return cx + x*scale; }
+function sy(y){ return cy - y*scale; }
+
+// ============ 绘图基元 ============
+function gridAxes(N){
+  for(let i=-N;i<=N;i++){
+    seg(i,-N,i,N,'rgba(120,130,160,.07)',1);
+    seg(-N,i,N,i,'rgba(120,130,160,.07)',1);
+  }
+  seg(-N,0,N,0,'rgba(200,210,235,.18)',1);
+  seg(0,-N,0,N,'rgba(200,210,235,.18)',1);
+}
+function seg(x0,y0,x1,y1,col,wd,dash){
+  ctx.save(); ctx.beginPath(); ctx.setLineDash(dash||[]);
+  ctx.moveTo(sx(x0),sy(y0)); ctx.lineTo(sx(x1),sy(y1));
+  ctx.strokeStyle=col; ctx.lineWidth=wd; ctx.stroke(); ctx.restore();
+}
+function dot(x,y,r,col,a){ ctx.beginPath(); ctx.arc(sx(x),sy(y),r,0,7); ctx.fillStyle=col; ctx.globalAlpha=a==null?1:a; ctx.fill(); ctx.globalAlpha=1; }
+function cross(x,y,r,col){ // 质心标记 ×
+  const X=sx(x),Y=sy(y);
+  ctx.strokeStyle=col; ctx.lineWidth=3.4; ctx.beginPath();
+  ctx.moveTo(X-r,Y-r); ctx.lineTo(X+r,Y+r); ctx.moveTo(X-r,Y+r); ctx.lineTo(X+r,Y-r); ctx.stroke();
+  ctx.beginPath(); ctx.arc(X,Y,r+5,0,7); ctx.lineWidth=2; ctx.strokeStyle=col; ctx.stroke();
+}
+
+// =========================================================================
+// ============================ K-means 模块 ===============================
+// =========================================================================
+const KM = {
+  pts:[],            // [{x,y}]
+  cluster:[],        // 每点的簇 index（-1 未指派）
+  cents:[],          // 质心 [{x,y}]
+  k:3, n:300, dataset:'blobs',
+  round:0, phase:'init', // 'init'|'assigned'|'updated'
+  sseHist:[], lastChanged:null, emptyHandled:false,
+};
+let kmPlaying=false, kmPlayT=0;
+
+function genData(kind, n){
+  seed = (seed*16807 + 12345)>>>0;  // 让“重新生成点云”每次不同但可演进
+  const pts=[];
+  if(kind==='blobs'){
+    const C=[[-3,2.4],[3.2,2.6],[0,-2.8]];   // 3 个团块，与默认 k=3 对齐
+    for(let i=0;i<n;i++){ const c=C[i%C.length]; pts.push({x:c[0]+gauss()*0.8, y:c[1]+gauss()*0.8}); }
+  } else if(kind==='overlap'){
+    const C=[[-1.4,0.8],[1.4,0.8],[0,-1.6]];
+    for(let i=0;i<n;i++){ const c=C[i%3]; pts.push({x:c[0]+gauss()*1.25, y:c[1]+gauss()*1.25}); }
+  } else if(kind==='aniso'){
+    // 三个被拉长且旋转的椭圆簇——K-means 球状假设会切错
+    const C=[[-2.6,1.8,0.6],[2.4,1.6,0.6],[0,-2.4,-0.5]];
+    for(let i=0;i<n;i++){ const c=C[i%3]; let a=gauss()*2.3,b=gauss()*0.45;
+      const co=Math.cos(c[2]),si=Math.sin(c[2]);
+      pts.push({x:c[0]+a*co-b*si, y:c[1]+a*si+b*co}); }
+  } else if(kind==='moons'){
+    for(let i=0;i<n;i++){
+      const up=i%2===0; const t=rnd()*Math.PI;
+      if(up) pts.push({x:Math.cos(t)*3-1.5+gauss()*0.18, y:Math.sin(t)*3-0.8+gauss()*0.18});
+      else   pts.push({x:Math.cos(t)*3+0.0+gauss()*0.18, y:-Math.sin(t)*3+1.0+gauss()*0.18});
+    }
+  } else if(kind==='ring'){
+    for(let i=0;i<n;i++){
+      const inner=i%2===0; const a=rnd()*2*Math.PI; const R=inner?1.1:3.6;
+      pts.push({x:Math.cos(a)*R+gauss()*0.18, y:Math.sin(a)*R+gauss()*0.18});
+    }
+  } else { // uniform
+    for(let i=0;i<n;i++) pts.push({x:(rnd()*2-1)*4.6, y:(rnd()*2-1)*4.2});
+  }
+  return pts;
+}
+
+function kmReinit(){ // k-means++ 风格初始化（按距离平方加权选种子，稳健且演示意义更好）
+  const p=KM.pts, k=KM.k;
+  if(p.length===0){ KM.cents=[]; return; }
+  const cents=[];
+  // 第一个种子：随机点
+  cents.push({...p[(rnd()*p.length)|0]});
+  while(cents.length<k){
+    let sumD=0; const d=new Array(p.length);
+    for(let i=0;i<p.length;i++){
+      let best=Infinity;
+      for(const c of cents){ const dx=p[i].x-c.x,dy=p[i].y-c.y; const dd=dx*dx+dy*dy; if(dd<best)best=dd; }
+      d[i]=best; sumD+=best;
+    }
+    if(sumD<1e-12){ cents.push({...p[(rnd()*p.length)|0]}); continue; }
+    let r=rnd()*sumD, idx=0;
+    for(let i=0;i<p.length;i++){ r-=d[i]; if(r<=0){ idx=i; break; } idx=i; }
+    cents.push({...p[idx]});
+  }
+  KM.cents=cents;
+  KM.cluster=new Array(p.length).fill(-1);
+  KM.round=0; KM.phase='init'; KM.sseHist=[]; KM.lastChanged=null; KM.emptyHandled=false;
+  kmStop();
+  kmUpdate();
+}
+
+function kmAssign(){ // 指派步：返回是否有点改簇
+  const p=KM.pts, c=KM.cents; let changed=false; let emptyFix=false;
+  const newCl=new Array(p.length);
+  for(let i=0;i<p.length;i++){
+    let best=Infinity, bi=0;
+    for(let j=0;j<c.length;j++){ const dx=p[i].x-c[j].x,dy=p[i].y-c[j].y; const dd=dx*dx+dy*dy; if(dd<best){best=dd;bi=j;} }
+    newCl[i]=bi; if(newCl[i]!==KM.cluster[i]) changed=true;
+  }
+  KM.cluster=newCl; KM.phase='assigned'; KM.lastChanged=changed;
+  return changed;
+}
+function kmUpdateCents(){ // 更新步：质心 = 簇均值；空簇重投到最远点
+  const p=KM.pts, k=KM.k;
+  const sx_=new Array(k).fill(0), sy_=new Array(k).fill(0), cnt=new Array(k).fill(0);
+  for(let i=0;i<p.length;i++){ const j=KM.cluster[i]; sx_[j]+=p[i].x; sy_[j]+=p[i].y; cnt[j]++; }
+  KM.emptyHandled=false;
+  for(let j=0;j<k;j++){
+    if(cnt[j]>0){ KM.cents[j]={x:sx_[j]/cnt[j], y:sy_[j]/cnt[j]}; }
+    else { // 空簇：重投到离当前质心最远的点（标准修复，避免簇消失）
+      let far=-1, fi=0;
+      for(let i=0;i<p.length;i++){ const dx=p[i].x-KM.cents[j].x,dy=p[i].y-KM.cents[j].y; const dd=dx*dx+dy*dy; if(dd>far){far=dd;fi=i;} }
+      if(p.length) KM.cents[j]={...p[fi]};
+      KM.emptyHandled=true;
+    }
+  }
+  KM.phase='updated'; KM.round++;
+}
+function kmSSE(){
+  let s=0; const p=KM.pts;
+  for(let i=0;i<p.length;i++){ const c=KM.cents[KM.cluster[i]]; if(!c)continue; const dx=p[i].x-c.x,dy=p[i].y-c.y; s+=dx*dx+dy*dy; }
+  return s;
+}
+
+// 单步分两小相：init/updated → 指派；assigned → 更新
+function kmStep(){
+  if(KM.cents.length===0) kmReinit();
+  if(KM.phase==='assigned'){
+    kmUpdateCents();
+    KM.sseHist.push(kmSSE());
+    // 收敛检测：上一次指派无改动 → 已收敛
+    if(KM.lastChanged===false){ kmStop(); }
+  } else {
+    const changed=kmAssign();
+    if(KM.phase==='init' || KM.sseHist.length===0) KM.sseHist.push(kmSSE());
+    else KM.sseHist[KM.sseHist.length-1]=kmSSE(); // 指派后立即刷新 SSE
+    if(!changed && KM.round>0){ kmStop(); } // 指派无变化 = 收敛
+  }
+  kmUpdate();
+}
+function kmConverged(){
+  return KM.round>0 && KM.lastChanged===false && KM.phase==='updated';
+}
+
+function kmLoop(t){
+  if(!kmPlaying) return;
+  if(t-kmPlayT>650){ kmPlayT=t; kmStep(); if(kmConverged()){ kmStop(); } }
+  requestAnimationFrame(kmLoop);
+}
+function kmPlay(on){
+  kmPlaying=on;
+  bPlay.textContent = on? '⏸ 暂停' : '▶ 自动运行';
+  bPlay.classList.toggle('active', on);
+  if(on){ kmPlayT=0; requestAnimationFrame(kmLoop); }
+}
+function kmStop(){ if(kmPlaying) kmPlay(false); }
+
+// ---- K-means 绘制 ----
+function drawKM(){
+  gridAxes(6);
+  const p=KM.pts, c=KM.cents;
+  // 指派阶段：每点连到所属质心（细线，演示“就近归簇”）
+  if(KM.phase==='assigned'){
+    for(let i=0;i<p.length;i++){ const j=KM.cluster[i]; const cc=c[j]; if(cc) seg(p[i].x,p[i].y,cc.x,cc.y, hex2rgba(CL[j%CL.length],.28),1); }
+  }
+  // 点
+  for(let i=0;i<p.length;i++){
+    const j=KM.cluster[i];
+    const col = (j<0||KM.phase==='init') ? 'rgba(154,160,180,.85)' : CL[j%CL.length];
+    dot(p[i].x,p[i].y, 3, col, .9);
+  }
+  // 质心
+  for(let j=0;j<c.length;j++) cross(c[j].x,c[j].y, 9, '#ffffff');
+  for(let j=0;j<c.length;j++) cross(c[j].x,c[j].y, 7, CL[j%CL.length]);
+  // 阶段标题
+  ctx.fillStyle='rgba(231,233,240,.9)'; ctx.font='600 14px system-ui'; ctx.textAlign='center';
+  const ph = KM.phase==='init'?'初始化：随机质心，尚未指派'
+           : KM.phase==='assigned'?'① 指派：每点连到最近质心（颜色=所属簇）'
+           : '② 更新：质心移到各簇均值';
+  ctx.fillText(ph, cx, 22); ctx.textAlign='left';
+}
+function hex2rgba(hex,a){ const n=parseInt(hex.slice(1),16); return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`; }
+
+// ---- K-means 面板读数 ----
+function kmUpdate(){
+  const phTxt = KM.phase==='init'?'等待初始化' : KM.phase==='assigned'?'① 指派' : '② 更新质心';
+  oPhase.textContent=phTxt;
+  oRound.textContent=KM.round;
+  const sse = KM.sseHist.length? KM.sseHist[KM.sseHist.length-1] : (KM.cents.length?kmSSE():null);
+  oSSE.textContent = sse==null?'—':sse.toFixed(2);
+  oChanged.textContent = KM.lastChanged==null?'—':(KM.lastChanged?'有（未收敛）':'无');
+  // 空簇提示
+  oEmpty.textContent = KM.emptyHandled?'修复了空簇':'—';
+  // 收敛 pill
+  if(kmConverged()){ oConv.textContent='已收敛'; oConv.className='pill ok'; }
+  else { oConv.textContent='迭代中'; oConv.className='pill run'; }
+  // SSE 历史小图（文本 + 微型条）
+  if(KM.sseHist.length){
+    const mx=Math.max(...KM.sseHist), mn=Math.min(...KM.sseHist);
+    const tail=12, off=Math.max(0,KM.sseHist.length-tail);
+    const shown=KM.sseHist.slice(off);
+    let s='<b>SSE 下降轨迹</b>（单调不增'+(off>0?`，只显示最近 ${tail} 轮`:'')+'）：<br>';
+    s += shown.map((v,k)=>{
+      const i=off+k;
+      const w = mx>mn? 6+ (v-mn)/(mx-mn)*100 : 60;
+      return `<div style="display:flex;align-items:center;gap:6px;margin:1px 0"><span style="color:var(--dim);width:34px">轮${i}</span><span style="display:inline-block;height:7px;width:${w.toFixed(0)}px;background:var(--orange);border-radius:4px"></span><span style="color:#fff;font-variant-numeric:tabular-nums">${v.toFixed(1)}</span></div>`;
+    }).join('');
+    oSSEhist.innerHTML=s;
+  } else oSSEhist.innerHTML='';
+  draw();
+}
+
+// =========================================================================
+// ============================== PCA 模块 =================================
+// =========================================================================
+const PC = { pts:[], rho:0.8, vx:2.2, vy:0.8, n:240, mean:{x:0,y:0},
+  cov:{xx:0,xy:0,yy:0}, l1:0,l2:0, v1:[1,0], v2:[0,1], evr1:0,evr2:0 };
+
+function pcaGen(){
+  const n=PC.n, rho=Math.max(-0.97,Math.min(0.97,PC.rho));
+  const sx_=Math.sqrt(PC.vx), sy_=Math.sqrt(PC.vy);
+  // 用 Cholesky 把独立高斯变成目标相关结构
+  const a=sx_, b=rho*sy_, d=sy_*Math.sqrt(Math.max(1e-9,1-rho*rho));
+  const pts=[];
+  for(let i=0;i<n;i++){ const z1=gauss(), z2=gauss(); pts.push({x:a*z1, y:b*z1+d*z2}); }
+  PC.pts=pts;
+  pcaCompute();
+}
+function pcaCompute(){
+  const p=PC.pts, n=p.length||1;
+  let mx=0,my=0; for(const q of p){ mx+=q.x; my+=q.y; } mx/=n; my/=n;
+  PC.mean={x:mx,y:my};
+  let cxx=0,cxy=0,cyy=0;
+  for(const q of p){ const dx=q.x-mx, dy=q.y-my; cxx+=dx*dx; cxy+=dx*dy; cyy+=dy*dy; }
+  const den=Math.max(1,n-1); cxx/=den; cxy/=den; cyy/=den;
+  PC.cov={xx:cxx,xy:cxy,yy:cyy};
+  // 2×2 对称矩阵闭式特征分解
+  const tr=cxx+cyy, dt=cxx*cyy-cxy*cxy;
+  const disc=Math.sqrt(Math.max(0,tr*tr/4-dt));
+  let l1=tr/2+disc, l2=tr/2-disc;
+  l1=Math.max(0,l1); l2=Math.max(0,l2);
+  // 特征向量（对称阵实正交）
+  let v1;
+  if(Math.abs(cxy)>1e-9) v1=[l1-cyy, cxy];
+  else v1 = (cxx>=cyy)?[1,0]:[0,1];
+  let nrm=Math.hypot(v1[0],v1[1])||1; v1=[v1[0]/nrm,v1[1]/nrm];
+  const v2=[-v1[1],v1[0]];
+  PC.l1=l1; PC.l2=l2; PC.v1=v1; PC.v2=v2;
+  const tot=l1+l2 || 1e-9; PC.evr1=l1/tot; PC.evr2=l2/tot;
+  pcaUpdate();
+}
+
+function drawPCA(){
+  gridAxes(6);
+  const showC = tCentered.checked;
+  const m=PC.mean;
+  const ox = showC? 0 : m.x, oy = showC? 0 : m.y;   // 原点：去均值时移到 0
+  const tx = (x)=> showC? x-m.x : x;
+  const ty = (y)=> showC? y-m.y : y;
+
+  // 均值点
+  // 投影脚（到 PC1 直线，过均值）
+  if(tProj.checked){
+    const v=PC.v1;
+    for(const q of PC.pts){
+      const dx=q.x-m.x, dy=q.y-m.y;
+      const t=dx*v[0]+dy*v[1];                 // 在 PC1 上的坐标
+      const px=m.x+t*v[0], py=m.y+t*v[1];      // 投影点（世界系）
+      seg(tx(q.x),ty(q.y), tx(px),ty(py), 'rgba(34,199,214,.22)',1);
+    }
+  }
+  // 数据点
+  for(const q of PC.pts) dot(tx(q.x),ty(q.y), 3, 'rgba(154,160,180,.9)', .85);
+  // 投影点（落在 PC1 上的脚）
+  if(tProj.checked){
+    const v=PC.v1;
+    for(const q of PC.pts){
+      const dx=q.x-m.x, dy=q.y-m.y; const t=dx*v[0]+dy*v[1];
+      const px=m.x+t*v[0], py=m.y+t*v[1];
+      dot(tx(px),ty(py), 2.2, 'rgba(34,199,214,.85)', .9);
+    }
+  }
+  // 主轴：长度 ∝ 2√λ（±标准差范围，乘 2 让肉眼明显）
+  const c0x = showC?0:m.x, c0y=showC?0:m.y;
+  drawAxis(c0x,c0y, PC.v1, 2*Math.sqrt(PC.l1), '#f5a623', 'PC1');
+  drawAxis(c0x,c0y, PC.v2, 2*Math.sqrt(PC.l2), '#22c7d6', 'PC2');
+  // 均值标记
+  cross(c0x,c0y, 6, '#ffffff');
+  ctx.fillStyle='rgba(231,233,240,.9)'; ctx.font='600 13px system-ui'; ctx.textAlign='center';
+  ctx.fillText(showC?'去均值坐标（数据已平移到原点）':'原始坐标（× = 样本均值）', cx, 22); ctx.textAlign='left';
+}
+function drawAxis(ox,oy,v,len,col,label){
+  const x1=ox+v[0]*len, y1=oy+v[1]*len, x2=ox-v[0]*len, y2=oy-v[1]*len;
+  seg(x2,y2,x1,y1,col,3);
+  // 箭头（正向）
+  const X=sx(x1),Y=sy(y1),X0=sx(ox),Y0=sy(oy);
+  const ang=Math.atan2(Y-Y0,X-X0), hl=12;
+  ctx.beginPath(); ctx.moveTo(X,Y);
+  ctx.lineTo(X-hl*Math.cos(ang-0.4),Y-hl*Math.sin(ang-0.4));
+  ctx.lineTo(X-hl*Math.cos(ang+0.4),Y-hl*Math.sin(ang+0.4));
+  ctx.closePath(); ctx.fillStyle=col; ctx.fill();
+  ctx.fillStyle=col; ctx.font='600 13px system-ui'; ctx.fillText(label, X+8, Y-6);
+}
+
+function pcaUpdate(){
+  oCxx.textContent=PC.cov.xx.toFixed(2);
+  oCxy.textContent=PC.cov.xy.toFixed(2);
+  oCyy.textContent=PC.cov.yy.toFixed(2);
+  oL1.textContent=PC.l1.toFixed(2);
+  oL2.textContent=PC.l2.toFixed(2);
+  oV1.textContent='['+PC.v1[0].toFixed(2)+', '+PC.v1[1].toFixed(2)+']';
+  oEVR1.textContent=(PC.evr1*100).toFixed(1)+' %';
+  oEVR2.textContent=(PC.evr2*100).toFixed(1)+' %';
+  barEVR.style.width=(PC.evr1*100).toFixed(1)+'%';
+  draw();
+}
+
+// =========================================================================
+// ============================ 调度与事件 =================================
+// =========================================================================
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  if(mode==='KM') drawKM(); else drawPCA();
+}
+
+// ----- 模式切换 -----
+function setMode(m){
+  mode=m;
+  mKM.classList.toggle('active', m==='KM');
+  mPCA.classList.toggle('active', m==='PCA');
+  panelKM.classList.toggle('hide', m!=='KM');
+  panelPCA.classList.toggle('hide', m!=='PCA');
+  kmStop();
+  setLegend();
+  draw();
+}
+mKM.onclick=()=>setMode('KM');
+mPCA.onclick=()=>setMode('PCA');
+
+// ----- K-means 控件 -----
+const sK=document.getElementById('sK'), vK=document.getElementById('vK');
+const sN=document.getElementById('sN'), vN=document.getElementById('vN');
+const bStep=document.getElementById('bStep'), bPlay=document.getElementById('bPlay');
+const bReinit=document.getElementById('bReinit'), bNewData=document.getElementById('bNewData');
+
+sK.oninput=e=>{ KM.k=+e.target.value; vK.textContent=KM.k; kmReinit(); };
+sN.oninput=e=>{ KM.n=+e.target.value; vN.textContent=KM.n; KM.pts=genData(KM.dataset,KM.n); kmReinit(); };
+bStep.onclick=()=>{ kmStop(); kmStep(); };
+bPlay.onclick=()=>{ if(KM.cents.length===0) kmReinit(); kmPlay(!kmPlaying); };
+bReinit.onclick=()=> kmReinit();
+bNewData.onclick=()=>{ KM.pts=genData(KM.dataset,KM.n); kmReinit(); };
+
+document.querySelectorAll('#panelKM .presets button').forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll('#panelKM .presets button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    KM.dataset=btn.dataset.d;
+    KM.pts=genData(KM.dataset,KM.n);
+    kmReinit();
+  };
+});
+
+// ----- PCA 控件 -----
+const pRho=document.getElementById('pRho'), vRho=document.getElementById('vRho');
+const pVx=document.getElementById('pVx'), vVx=document.getElementById('vVx');
+const pVy=document.getElementById('pVy'), vVy=document.getElementById('vVy');
+const pN=document.getElementById('pN'), vPN=document.getElementById('vPN');
+const pNewData=document.getElementById('pNewData');
+const tProj=document.getElementById('tProj'), tCentered=document.getElementById('tCentered');
+
+pRho.oninput=e=>{ PC.rho=+e.target.value; vRho.textContent=PC.rho.toFixed(2); pcaGen(); };
+pVx.oninput =e=>{ PC.vx =+e.target.value; vVx.textContent=PC.vx.toFixed(2); pcaGen(); };
+pVy.oninput =e=>{ PC.vy =+e.target.value; vVy.textContent=PC.vy.toFixed(2); pcaGen(); };
+pN.oninput  =e=>{ PC.n  =+e.target.value; vPN.textContent=PC.n; pcaGen(); };
+pNewData.onclick=()=> pcaGen();
+tProj.onchange=draw; tCentered.onchange=draw;
+
+// ----- 图例 / 提示（随模式切换） -----
+function setLegend(){
+  if(mode==='KM'){
+    legendEl.innerHTML =
+      '<div><span class="x" style="color:#fff">✕</span><b>质心</b>（簇代表点 = 簇均值）</div>'+
+      '<div><span class="dot" style="background:#7bd88f"></span><span class="dot" style="background:#22c7d6"></span><span class="dot" style="background:#ffd166"></span> 各簇颜色（硬指派）</div>'+
+      '<div><span class="dot" style="background:rgba(154,160,180,.85)"></span>尚未指派的点</div>'+
+      '<div><span class="ln" style="border-color:rgba(34,199,214,.6)"></span>指派步：点 → 最近质心</div>';
+    hintEl.innerHTML='操作提示（§6.1）：① 选<b class="r">两弯月 / 同心环</b>再「自动运行」，看 K-means 如何<b>切错非球状簇</b>；② 反复点「<b>重新随机初始化</b>」感受<b>初始化敏感</b>（同一 k 收敛到不同 SSE）；③ 调 <b>k</b> 看 SSE 怎样随 k 单调下降（肘部法则）。';
+  } else {
+    legendEl.innerHTML =
+      '<div><span class="ln" style="border-color:#f5a623"></span><b style="color:#f5a623">PC1</b>（最大方差方向，长 ∝ √λ₁）</div>'+
+      '<div><span class="ln" style="border-color:#22c7d6"></span><b style="color:#22c7d6">PC2</b>（次方向，与 PC1 正交）</div>'+
+      '<div><span class="dot" style="background:rgba(154,160,180,.9)"></span>数据点 &nbsp; <span class="dot" style="background:rgba(34,199,214,.85)"></span>它在 PC1 上的投影脚</div>'+
+      '<div><span class="x" style="color:#fff">✕</span>样本均值（PCA 前先去均值）</div>';
+    hintEl.innerHTML='操作提示（§6.3）：① 调<b>相关性 ρ</b>看 PC1 怎样转向数据「主对角」；ρ→0 时两轴趋于等长（无主方向）。② 看右侧<b>解释方差比</b>：ρ 越强 PC1 占比越高 ⇒ 降到 1 维丢失越少。③ <b>PCA = 协方差特征分解 = 数据 SVD</b>。';
+  }
+}
+
+// ----- 初始化 -----
+resize();
+KM.pts=genData('blobs',KM.n);
+kmReinit();
+pcaGen();
+setLegend();
+draw();
+</script>
+</body>
+</html>

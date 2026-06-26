@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>小型神经网络学 2D 分类 · 决策边界如何弯出来 —— 配套第 7 章</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a24; --panel2:#1f2330; --line:#2b3040;
+    --text:#e7e9f0; --dim:#9aa0b4;
+    --orange:#f5a623;  /* 训练损失 / 类别 1 */
+    --cyan:#22c7d6;    /* 测试损失 */
+    --yellow:#ffd166;  /* 强调 / 边界 / 激活 */
+    --violet:#b388ff;  /* 类别 0 */
+    --red:#ef6b73;     /* 警示 / 发散 */
+    --green:#7bd88f;   /* 正向教学点 / 良好 */
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;}
+  header{padding:13px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{margin:0;font-size:18px;letter-spacing:.3px}
+  header h1 .c{color:var(--cyan)} header h1 .o{color:var(--orange)}
+  header p{margin:5px 0 0;color:var(--dim);font-size:13px;line-height:1.65}
+  header p b{color:#fff}
+  .wrap{display:flex;height:calc(100% - 86px);min-height:0}
+  .stage{position:relative;flex:1 1 auto;min-width:0;overflow:hidden;
+    background:radial-gradient(circle at 48% 46%,#161a26 0%,#0d0f15 84%)}
+  #cv{display:block;width:100%;height:100%;cursor:crosshair}
+  .legend{position:absolute;left:14px;top:12px;font-size:12.5px;pointer-events:none;
+    background:rgba(15,17,23,.62);padding:8px 11px;border-radius:8px;border:1px solid var(--line);line-height:1.95}
+  .legend .ln{display:inline-block;width:18px;height:0;border-top:3px solid;margin-right:6px;vertical-align:middle}
+  .legend .dn{display:inline-block;width:18px;height:0;border-top:3px dashed;margin-right:6px;vertical-align:middle}
+  .legend .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:middle}
+  .legend .sw{display:inline-block;width:14px;height:11px;border-radius:3px;margin-right:7px;vertical-align:middle}
+  .hint{position:absolute;left:14px;bottom:12px;color:var(--dim);font-size:12px;pointer-events:none;
+    background:rgba(15,17,23,.55);padding:6px 10px;border-radius:8px;border:1px solid var(--line);max-width:600px;line-height:1.6}
+  .panel{flex:0 0 432px;max-width:56%;overflow-y:auto;border-left:1px solid var(--line);background:var(--panel);padding:16px}
+  .panel h2{font-size:14px;margin:18px 0 8px;color:#fff}
+  .panel h2:first-child{margin-top:0}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+  button{background:#262b3a;color:var(--text);border:1px solid var(--line);border-radius:8px;
+    padding:7px 11px;font-size:13px;cursor:pointer}
+  button:hover{filter:brightness(1.13)}
+  button.active{background:#2f3a4f;border-color:var(--cyan);color:#fff}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .row{display:flex;align-items:center;gap:10px;margin:9px 0}
+  .row label{flex:0 0 92px;font-weight:600;font-size:13px}
+  input[type=range]{flex:1 1 auto;accent-color:var(--cyan)}
+  .val{flex:0 0 60px;text-align:right;font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px}
+  .stat{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px dashed #2b3040}
+  .stat:last-child{border-bottom:none}
+  .stat span:last-child{color:#fff;font-variant-numeric:tabular-nums}
+  .note{font-size:12.5px;color:var(--dim);line-height:1.85}
+  .note b{color:#e7e9f0}
+  .note .o{color:var(--orange)} .note .c{color:var(--cyan)} .note .y{color:var(--yellow)}
+  .note .v{color:var(--violet)} .note .r{color:var(--red)} .note .g{color:var(--green)}
+  code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#cdd6f4}
+  .presets{display:flex;flex-wrap:wrap;gap:6px}
+  .presets button{flex:1 1 30%;font-size:12px;padding:6px 4px}
+  .btnrow{display:flex;gap:8px;margin-top:6px}
+  .btnrow button{flex:1 1 0}
+  .seg{display:flex;gap:6px;flex-wrap:wrap}
+  .seg button{flex:1 1 0;font-size:12px;padding:6px 4px}
+  .arch{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:4px 0}
+  .arch .ly{display:flex;flex-direction:column;align-items:center;gap:4px;
+    background:#262b3a;border:1px solid var(--line);border-radius:8px;padding:6px 8px;min-width:54px}
+  .arch .ly .cnt{font-size:16px;font-weight:700;color:var(--yellow);font-variant-numeric:tabular-nums}
+  .arch .ly .nm{font-size:10.5px;color:var(--dim)}
+  .arch .ly .pm{display:flex;gap:4px;margin-top:2px}
+  .arch .ly .pm button{padding:1px 6px;font-size:12px;line-height:1.2}
+  .arch .ar{color:var(--dim);font-size:14px}
+  .canvas-cap{position:absolute;font-size:11.5px;color:var(--dim);pointer-events:none;
+    background:rgba(15,17,23,.5);padding:2px 7px;border-radius:6px;border:1px solid var(--line)}
+  #curveCap{right:14px;top:12px}
+  .pill{display:inline-block;padding:1px 8px;border-radius:6px;font-size:12px;font-weight:600;margin-left:6px}
+  .pill.ok{background:rgba(123,216,143,.16);color:var(--green)}
+  .pill.warn{background:rgba(245,166,35,.16);color:var(--orange)}
+  .pill.bad{background:rgba(239,107,115,.16);color:var(--red)}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="o">小型神经网络</span>学 <span class="c">2D 分类</span> · 看决策边界从无到有地弯出来</h1>
+  <p>这是一个 <b>TensorFlow Playground 风格</b> 的玩具：亲手搭一个小 <b>多层感知机（MLP）</b>，用<b>纯手写的前向 + 反向传播</b>训练它分开两类点。0 个隐藏层时模型退化成<b>线性分类器</b>，解不了异或 / 环形；只要加上隐藏层 + <b>非线性激活</b>，边界就能弯曲——这正是第 7 章 §7.2「通用逼近（universal approximation）」与「<b>非线性的必要性</b>」的可视化。调层数 / 宽度 / 激活 / 学习率，看损失曲线下降、决策热力图成形。配套《机器学习与深度学习深度入门》第 7 章 §7.1「MLP 与激活」、§7.2「通用逼近」、§7.3「反向传播」。</p>
+</header>
+<div class="wrap">
+  <div class="stage">
+    <canvas id="cv"></canvas>
+    <div class="legend" id="legend"></div>
+    <div class="hint" id="hint"></div>
+  </div>
+  <div class="panel">
+
+    <h2>数据集预设（dataset）</h2>
+    <div class="card">
+      <div class="presets" id="datasets">
+        <button data-d="linear" class="active">线性可分</button>
+        <button data-d="circle">环形 circle</button>
+        <button data-d="xor">异或 XOR</button>
+        <button data-d="moons">两弯月 moons</button>
+        <button data-d="spiral">螺旋 spiral</button>
+      </div>
+      <div class="row" style="margin-top:10px"><label>噪声 noise</label><input id="sNoise" type="range" min="0" max="0.5" step="0.01" value="0.10"><span class="val" id="vNoise">0.10</span></div>
+      <div class="row"><label>点数 n</label><input id="sN" type="range" min="60" max="300" step="20" value="200"><span class="val" id="vN">200</span></div>
+      <div class="note">每次换数据集 / 调噪声会重采样，并按 50/50 划分<b class="o">训练集</b>与<b class="c">测试集</b>（测试集只用来评估泛化，<b>从不参与训练</b>）。</div>
+    </div>
+
+    <h2>网络结构（architecture）</h2>
+    <div class="card">
+      <div class="arch" id="archView"></div>
+      <div class="btnrow" style="margin-top:8px">
+        <button id="bLayerMinus">− 隐藏层</button>
+        <button id="bLayerPlus">+ 隐藏层</button>
+      </div>
+      <div class="row" style="margin-top:10px"><label>激活 σ</label>
+        <div class="seg" id="actSeg" style="flex:1 1 auto">
+          <button data-a="tanh" class="active">tanh</button>
+          <button data-a="relu">ReLU</button>
+          <button data-a="sigmoid">sigmoid</button>
+        </div>
+      </div>
+      <div class="row"><label>学习率 η</label><input id="sLR" type="range" min="-3" max="0.3" step="0.05" value="-1"><span class="val" id="vLR">0.10</span></div>
+      <div class="note" id="archNote"></div>
+    </div>
+
+    <h2>训练（training）</h2>
+    <div class="card">
+      <div class="btnrow">
+        <button id="bPlay">▶ 训练</button>
+        <button id="bReset">重置权重</button>
+        <button id="bNewData">重采样</button>
+      </div>
+      <div class="row" style="margin-top:8px"><label>画笔类别</label>
+        <button id="bPenClass" style="flex:1 1 auto;text-align:left">在画布点击添加 <b style="color:var(--orange)">类别 1</b> 点（点此切换）</button>
+      </div>
+      <div class="stat" style="margin-top:8px"><span>已训练轮数 epoch</span><span id="oEpoch">0</span></div>
+      <div class="stat"><span><b class="o">训练</b>损失 / 准确率</span><span id="oTrain">— / —</span></div>
+      <div class="stat"><span><b class="c">测试</b>损失 / 准确率</span><span id="oTest">— / —</span></div>
+      <div class="stat"><span>泛化间隙 train−test acc <span id="oGap" class="pill ok">—</span></span><span id="oGapV">—</span></div>
+    </div>
+
+    <h2>关键教学点（§7.2）</h2>
+    <div class="card note">
+      <p><b class="r">① 0 隐藏层 = 线性，解不了 XOR / 环形。</b> 把隐藏层减到 0，模型就是 <code>y=σ(w·x+b)</code> 一条<b>直线边界</b>；在「异或 XOR」「环形」上准确率卡在 ~50–75%，怎么训都弯不动——线性假设空间根本装不下这种关系。</p>
+      <p><b class="g">② 加一个隐藏层，边界就能弯。</b> 隐藏层把输入折成多个半平面（ReLU）/ 软弯（tanh），输出层再线性组合它们——多个直线拼出曲线、闭合区域，于是 XOR / 环形迎刃而解。这就是<b class="y">通用逼近</b>的直觉：足够宽 / 深的 MLP 能逼近任意连续判别函数。</p>
+      <p><b class="v">③ 宽度 vs 深度。</b> 加<b>宽度</b>（每层神经元数）= 给同一层更多「折痕」，边界更细腻；加<b>深度</b>（层数）= 让折痕<b>组合</b>出更复杂的形状，对螺旋这种高度缠绕的边界更省参数。试试用 1 层 8 个 vs 2 层各 4 个解螺旋。</p>
+      <p><b class="o">④ 激活的角色。</b> 去掉非线性（线性激活）则<b>多层塌缩成一层</b>（矩阵相乘还是矩阵）——非线性是深度有意义的前提。tanh / sigmoid 软而易饱和、ReLU 折线且不饱和（§7.4 梯度消失）。</p>
+      <p><b class="c">⑤ 学习率 η。</b> 太小 → 慢得几乎不动；太大 → 损失震荡甚至发散（NaN）。这呼应第 4 章「优化」。</p>
+    </div>
+
+    <h2>怎么读这张图</h2>
+    <div class="card note">
+      <p><b>主画布（左）</b>：背景<b>决策热力图</b>是把整个平面每个像素喂进网络前向一遍得到的输出——<span class="o">橙</span>偏向类别 1（p→1）、<span class="v">紫</span>偏向类别 0（p→0）、<b>白线附近</b>是 50/50（p=0.5）的决策边界。圆点是数据：实心=训练点、空心=测试点，颜色为真实标签。点被背景「染对」颜色就是分对了。</p>
+      <p><b>曲线（右上角小图）</b>：横轴 epoch，<span class="o">橙=训练损失</span>、<span class="c">青=测试损失</span>（交叉熵）。两线都降且贴近 ⇒ 学得好；训练降而测试反升 ⇒ <b>过拟合</b>（呼应第 2 章偏差-方差、暗线一「泛化」）。</p>
+      <p><b>三件套视角（暗线二）</b>：<b>表示</b>=这个 MLP 假设空间；<b>目标</b>=二分类交叉熵损失（=伯努利 MLE，见《信息论》第 3 章、《概率与统计》第 7 章）；<b>优化</b>=对这非凸目标做<b>全批量梯度下降</b>，梯度由反向传播（链式法则）算出（§7.3）。</p>
+    </div>
+
+    <h2>算法说明（自检红线）</h2>
+    <div class="card note">
+      <p>前向：<code>a⁰=x → zˡ=Wˡaˡ⁻¹+bˡ, aˡ=σ(zˡ)</code>；输出层用 <b>sigmoid</b> 给出 p∈(0,1)。损失：<code>L=−[y log p+(1−y)log(1−p)]</code>（二分类交叉熵）。反向：<code>δᴸ=p−y</code> 起手，<code>δˡ=(Wˡ⁺¹ᵀδˡ⁺¹)⊙σ′(zˡ)</code> 逐层回传，<code>∂L/∂Wˡ=δˡaˡ⁻¹ᵀ</code>。全批量平均后 <code>W←W−η·∂L/∂W</code>。权重用小随机数初始化（避免对称、避免饱和，§7.5）。</p>
+      <p class="r">诚实的边界：通用逼近<b>只保证存在</b>能逼近的网络，<b>不保证</b>这个 SGD 一定能优化到、也不告诉你要多大——你会亲眼看到同样结构有时收敛、有时卡住，全看初始化 / 学习率 / 运气（§7.2「诚实的边界」）。</p>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const legendEl = document.getElementById('legend');
+const hintEl   = document.getElementById('hint');
+
+// ============================ 全局状态 ============================
+let DPR=1, W=0, H=0;
+let dataset='linear';
+let noise=0.10;
+let nPoints=200;
+let activation='tanh';
+let lr=0.1;
+let hidden=[4];            // 隐藏层每层神经元数；空数组 = 0 隐藏层（线性）
+let net=null;             // 当前 MLP
+let train=[], test=[];    // 数据点 {x,y,label}（label∈{0,1}）
+let epoch=0;
+let playing=false;
+let penClass=1;           // 画布点击添加点的类别（触屏/无右键设备可用此切换，右键仍强制 0）
+let lossHist=[];          // {tr,te,ep} 序列，画曲线（每点对齐一个 epoch）
+let heatGrid=null;        // 缓存热力图网格输出
+const GRID=58;            // 热力图分辨率（<=60，保证流畅）
+const DOMAIN=6;           // 坐标范围 [-DOMAIN/2, DOMAIN/2] 实际用 [-3,3]
+const R=3;                // 半径范围 ±3
+
+// ============================ 画布尺寸 / DPR 适配 ============================
+function resize(){
+  DPR = window.devicePixelRatio||1;
+  const r = cv.getBoundingClientRect();
+  W=r.width; H=r.height;
+  cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  draw();
+}
+window.addEventListener('resize', resize);
+
+// 主画布留出右上角给曲线小图。主图为正方形居中。
+function plotGeom(){
+  const pad=18;
+  const side=Math.max(120, Math.min(W-2*pad, H-2*pad));
+  const ox=(W-side)/2, oy=(H-side)/2;
+  return {ox,oy,side};
+}
+// 世界坐标 [-3,3] -> 屏幕（主图内）
+function gx(x,g){ return g.ox + (x+R)/(2*R)*g.side; }
+function gy(y,g){ return g.oy + (R-y)/(2*R)*g.side; }
+function inv_gx(px,g){ return (px-g.ox)/g.side*2*R - R; }
+function inv_gy(py,g){ return R - (py-g.oy)/g.side*2*R; }
+
+// ============================ 数学工具 ============================
+function rnd(){ return Math.random(); }
+function gauss(){ // Box-Muller
+  let u=0,v=0; while(u===0)u=Math.random(); while(v===0)v=Math.random();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+}
+function clamp01(x){ return x<1e-7?1e-7:(x>1-1e-7?1-1e-7:x); }
+
+// 激活与导数（按 z 计算 σ(z) 与 σ'(z)）
+function act(z){
+  if(activation==='relu') return z>0?z:0;
+  if(activation==='sigmoid'){ return 1/(1+Math.exp(-z)); }
+  return Math.tanh(z); // tanh
+}
+function dact(z, a){ // a=act(z) 已算好，复用
+  if(activation==='relu') return z>0?1:0;
+  if(activation==='sigmoid') return a*(1-a);
+  return 1-a*a; // tanh'
+}
+function sigmoid(z){ return 1/(1+Math.exp(-z)); }
+
+// ============================ 数据集生成 ============================
+function makeData(){
+  const pts=[];
+  const total=nPoints;
+  const ns=noise;
+  function push(x,y,lab){ pts.push({x,y,label:lab}); }
+  if(dataset==='linear'){
+    for(let i=0;i<total;i++){
+      const lab=i<total/2?1:0;
+      // 两个对角偏置的高斯团，线性可分
+      const cx = lab? 1.1 : -1.1, cy = lab? 1.1 : -1.1;
+      push(cx + gauss()*(0.55+ns*1.4), cy + gauss()*(0.55+ns*1.4), lab);
+    }
+  } else if(dataset==='circle'){
+    for(let i=0;i<total;i++){
+      const lab=i<total/2?1:0;
+      const r = lab? (rnd()*0.8+0.2) : (rnd()*0.8+1.5); // 内圈/外环
+      const a = rnd()*2*Math.PI;
+      push(r*Math.cos(a)+gauss()*ns*0.9, r*Math.sin(a)+gauss()*ns*0.9, lab);
+    }
+  } else if(dataset==='xor'){
+    for(let i=0;i<total;i++){
+      const x=(rnd()*2-1)*2.4, y=(rnd()*2-1)*2.4;
+      const lab=(x*y>0)?1:0; // 同号一类，异号另一类（四象限异或）
+      push(x+gauss()*ns*0.9, y+gauss()*ns*0.9, lab);
+    }
+  } else if(dataset==='moons'){
+    for(let i=0;i<total;i++){
+      const lab=i<total/2?1:0;
+      const a = rnd()*Math.PI;
+      let x,y;
+      if(lab){ x=Math.cos(a)*1.3-0.6; y=Math.sin(a)*1.3-0.3; }
+      else   { x=-Math.cos(a)*1.3+0.6; y=-Math.sin(a)*1.3+0.4; }
+      push(x+gauss()*ns*0.9, y+gauss()*ns*0.9, lab);
+    }
+  } else { // spiral
+    const per=total/2;
+    for(let lab=0;lab<2;lab++){
+      for(let i=0;i<per;i++){
+        const t = i/per*3.2;            // 圈数
+        const r = 0.25 + t*0.75;
+        const a = t*2.4 + lab*Math.PI;  // 两条互相缠绕
+        push(r*Math.cos(a)+gauss()*ns*0.7, r*Math.sin(a)+gauss()*ns*0.7, lab);
+      }
+    }
+  }
+  // 打乱，前一半训练后一半测试
+  for(let i=pts.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; const t=pts[i];pts[i]=pts[j];pts[j]=t; }
+  const half=Math.floor(pts.length/2);
+  train=pts.slice(0,half);
+  test=pts.slice(half);
+}
+
+// ============================ MLP：手写前向 + 反向 ============================
+// 结构 sizes = [2, h1, h2, ..., 1]；隐藏层用 act，输出层用 sigmoid。
+function buildNet(){
+  const sizes=[2, ...hidden, 1];
+  const Ws=[], Bs=[];
+  for(let l=1;l<sizes.length;l++){
+    const fin=sizes[l-1], fout=sizes[l];
+    // 初始化尺度：tanh/sigmoid 用 ~1/sqrt(fin)（Xavier 风），relu 用 ~sqrt(2/fin)（He）
+    const sc = (activation==='relu') ? Math.sqrt(2/fin) : Math.sqrt(1/fin);
+    const Wl=[], Bl=[];
+    for(let j=0;j<fout;j++){
+      const rowW=[];
+      for(let k=0;k<fin;k++) rowW.push(gauss()*sc);
+      Wl.push(rowW); Bl.push(0);
+    }
+    Ws.push(Wl); Bs.push(Bl);
+  }
+  net={sizes, Ws, Bs, diverged:false};
+  epoch=0; lossHist=[]; heatGrid=null;
+}
+
+// 前向：返回各层激活 a[0..L]（a[0]=x），以及各层 z（隐藏层）。输出 p∈(0,1)。
+function forward(x0,x1){
+  const a=[[x0,x1]];
+  const zs=[];
+  const L=net.Ws.length;
+  for(let l=0;l<L;l++){
+    const Wl=net.Ws[l], Bl=net.Bs[l], prev=a[l];
+    const z=[], cur=[];
+    for(let j=0;j<Wl.length;j++){
+      let s=Bl[j], row=Wl[j];
+      for(let k=0;k<row.length;k++) s+=row[k]*prev[k];
+      z.push(s);
+      if(l===L-1) cur.push(sigmoid(s));   // 输出层 sigmoid
+      else cur.push(act(s));              // 隐藏层 act
+    }
+    zs.push(z); a.push(cur);
+  }
+  return {a, zs, p:a[a.length-1][0]};
+}
+
+// 全批量一步梯度下降，返回训练平均损失
+function trainEpoch(){
+  if(net.diverged) return;
+  const L=net.Ws.length;
+  // 梯度累加器
+  const gW=net.Ws.map(Wl=>Wl.map(r=>r.map(()=>0)));
+  const gB=net.Bs.map(Bl=>Bl.map(()=>0));
+  let lossSum=0;
+  const m=train.length;
+  for(const pt of train){
+    const f=forward(pt.x, pt.y);
+    const p=clamp01(f.p);
+    const y=pt.label;
+    lossSum += -(y*Math.log(p)+(1-y)*Math.log(1-p));
+    // 反向：输出层 delta = p - y（sigmoid + 交叉熵的优雅简化）
+    let delta=[f.p - y];
+    for(let l=L-1;l>=0;l--){
+      const prev=f.a[l]; // a^{l}（即本层输入）
+      // 累加梯度
+      for(let j=0;j<net.Ws[l].length;j++){
+        const dj=delta[j];
+        for(let k=0;k<prev.length;k++) gW[l][j][k]+=dj*prev[k];
+        gB[l][j]+=dj;
+      }
+      if(l>0){
+        // 回传到上一层：delta_prev_k = (sum_j W[l][j][k]*delta[j]) * σ'(z^{l-1}_k)
+        const prevZ=f.zs[l-1], prevA=f.a[l];
+        const newDelta=new Array(net.Ws[l][0].length).fill(0);
+        for(let j=0;j<net.Ws[l].length;j++){
+          const dj=delta[j], row=net.Ws[l][j];
+          for(let k=0;k<row.length;k++) newDelta[k]+=row[k]*dj;
+        }
+        for(let k=0;k<newDelta.length;k++){
+          newDelta[k]*=dact(prevZ[k], prevA[k]);
+        }
+        delta=newDelta;
+      }
+    }
+  }
+  // 更新
+  let bad=false;
+  for(let l=0;l<L;l++){
+    for(let j=0;j<net.Ws[l].length;j++){
+      for(let k=0;k<net.Ws[l][j].length;k++){
+        const g=gW[l][j][k]/m;
+        net.Ws[l][j][k]-=lr*g;
+        if(!isFinite(net.Ws[l][j][k])) bad=true;
+      }
+      net.Bs[l][j]-=lr*(gB[l][j]/m);
+      if(!isFinite(net.Bs[l][j])) bad=true;
+    }
+  }
+  if(bad){ net.diverged=true; }
+  epoch++;
+  return lossSum/m;
+}
+
+// 评估损失 + 准确率
+function evalSet(set){
+  if(!set.length) return {loss:0, acc:0};
+  let loss=0, correct=0;
+  for(const pt of set){
+    const p=clamp01(forward(pt.x,pt.y).p);
+    loss += -(pt.label*Math.log(p)+(1-pt.label)*Math.log(1-p));
+    const pred=p>=0.5?1:0;
+    if(pred===pt.label) correct++;
+  }
+  return {loss:loss/set.length, acc:correct/set.length};
+}
+
+// 计算热力图网格（每格喂网络前向一遍）
+function computeHeat(){
+  heatGrid=new Float32Array(GRID*GRID);
+  for(let iy=0;iy<GRID;iy++){
+    const wy = R - (iy+0.5)/GRID*2*R;
+    for(let ix=0;ix<GRID;ix++){
+      const wx = -R + (ix+0.5)/GRID*2*R;
+      heatGrid[iy*GRID+ix]=forward(wx,wy).p;
+    }
+  }
+}
+
+// ============================ 绘图 ============================
+// p∈[0,1] 颜色：0=紫(类别0)，1=橙(类别1)，0.5≈灰白
+function heatColor(p){
+  // 以 0.5 为中性，向两端染色；接近边界更白
+  const t=(p-0.5)*2; // [-1,1]
+  const mag=Math.min(1,Math.abs(t));
+  // 类别1 橙 (245,166,35)，类别0 紫 (179,136,255)
+  let r,g,b;
+  if(t>=0){ r=245; g=166; b=35; }
+  else    { r=179; g=136; b=255; }
+  // 与背景灰(40,46,60)混合：mag 越大越饱和
+  const bg=[40,46,60];
+  const al=0.16+0.46*mag;
+  r=bg[0]*(1-al)+r*al; g=bg[1]*(1-al)+g*al; b=bg[2]*(1-al)+b*al;
+  return `rgb(${r|0},${g|0},${b|0})`;
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const g=plotGeom();
+
+  // --- 决策热力图 ---
+  if(net && heatGrid){
+    const cell=g.side/GRID;
+    for(let iy=0;iy<GRID;iy++){
+      for(let ix=0;ix<GRID;ix++){
+        ctx.fillStyle=heatColor(heatGrid[iy*GRID+ix]);
+        ctx.fillRect(g.ox+ix*cell, g.oy+iy*cell, cell+0.6, cell+0.6);
+      }
+    }
+    // 决策边界 p=0.5：逐格检测水平/垂直跨零，在过零处打白色短线（marching-squares 简化）
+    ctx.strokeStyle='rgba(255,255,255,.85)'; ctx.lineWidth=1.7;
+    ctx.beginPath();
+    for(let iy=0;iy<GRID;iy++){
+      for(let ix=0;ix<GRID;ix++){
+        const c=heatGrid[iy*GRID+ix]-0.5;
+        const cx=g.ox+(ix+0.5)*cell, cy=g.oy+(iy+0.5)*cell;
+        if(ix<GRID-1){ const rr=heatGrid[iy*GRID+ix+1]-0.5; if(c*rr<0){ const tt=c/(c-rr); ctx.moveTo(cx+tt*cell-2,cy); ctx.lineTo(cx+tt*cell+2,cy);} }
+        if(iy<GRID-1){ const dd=heatGrid[(iy+1)*GRID+ix]-0.5; if(c*dd<0){ const tt=c/(c-dd); ctx.moveTo(cx,cy+tt*cell-2); ctx.lineTo(cx,cy+tt*cell+2);} }
+      }
+    }
+    ctx.stroke();
+  }
+
+  // --- 主图边框 + 轴 ---
+  ctx.strokeStyle='rgba(200,210,235,.22)'; ctx.lineWidth=1;
+  ctx.strokeRect(g.ox,g.oy,g.side,g.side);
+  ctx.strokeStyle='rgba(200,210,235,.12)';
+  ctx.beginPath(); ctx.moveTo(gx(-R,g),gy(0,g)); ctx.lineTo(gx(R,g),gy(0,g));
+  ctx.moveTo(gx(0,g),gy(-R,g)); ctx.lineTo(gx(0,g),gy(R,g)); ctx.stroke();
+
+  // --- 数据点：训练=实心，测试=空心 ---
+  function drawPts(set, filled){
+    for(const pt of set){
+      const px=gx(pt.x,g), py=gy(pt.y,g);
+      const col=pt.label? '245,166,35' : '179,136,255';
+      ctx.beginPath(); ctx.arc(px,py,4,0,7);
+      if(filled){ ctx.fillStyle=`rgba(${col},.95)`; ctx.fill();
+        ctx.lineWidth=1; ctx.strokeStyle='rgba(15,17,23,.85)'; ctx.stroke(); }
+      else { ctx.lineWidth=2; ctx.strokeStyle=`rgba(${col},.95)`; ctx.stroke();
+        ctx.fillStyle='rgba(15,17,23,.55)'; ctx.fill(); }
+    }
+  }
+  drawPts(train, true);
+  drawPts(test, false);
+
+  // --- 右上角损失曲线小图 ---
+  drawCurves();
+}
+
+function drawCurves(){
+  const cw=Math.min(190, W*0.34), ch=Math.min(120, H*0.30);
+  const cx0=W-cw-14, cy0=14;
+  // 背板
+  ctx.fillStyle='rgba(15,17,23,.72)'; ctx.strokeStyle='rgba(43,48,64,1)'; ctx.lineWidth=1;
+  roundRect(cx0,cy0,cw,ch,8); ctx.fill(); ctx.stroke();
+  // 标题
+  ctx.fillStyle='#9aa0b4'; ctx.font='11px system-ui'; ctx.textAlign='left';
+  ctx.fillText('损失 loss vs epoch', cx0+8, cy0+15);
+  const px=cx0+8, py=cy0+22, pw=cw-16, ph=ch-30;
+  // 轴线
+  ctx.strokeStyle='rgba(120,130,160,.3)'; ctx.beginPath();
+  ctx.moveTo(px,py); ctx.lineTo(px,py+ph); ctx.lineTo(px+pw,py+ph); ctx.stroke();
+  if(lossHist.length<2) return;
+  // y 上界自适应（截断极大值，避免发散把图压扁）
+  let maxL=0.001;
+  for(const h of lossHist){ maxL=Math.max(maxL,h.tr,h.te); }
+  maxL=Math.min(maxL, 2.0); maxL=Math.max(maxL,0.4);
+  const n=lossHist.length;
+  // 横轴按真实 epoch 对齐（每点带 ep；shift() 丢早期点后仍正确映射）
+  const epLo=lossHist[0].ep, epHi=lossHist[n-1].ep, epSpan=Math.max(1,epHi-epLo);
+  function plot(key,col){
+    ctx.strokeStyle=col; ctx.lineWidth=1.6; ctx.beginPath();
+    for(let i=0;i<n;i++){
+      const x=px+ (lossHist[i].ep-epLo)/epSpan*pw;
+      const y=py+ph - Math.min(1,lossHist[i][key]/maxL)*ph;
+      i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+    }
+    ctx.stroke();
+  }
+  plot('tr','#f5a623');  // 训练
+  plot('te','#22c7d6');  // 测试
+}
+
+function roundRect(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+
+// ============================ 面板读数 ============================
+function refreshStats(){
+  oEpoch.textContent=epoch;
+  const tr=evalSet(train), te=evalSet(test);
+  if(net.diverged){
+    oTrain.textContent='发散 NaN'; oTest.textContent='发散 NaN';
+    oGap.textContent='发散'; oGap.className='pill bad'; oGapV.textContent='—';
+  } else {
+    oTrain.textContent=`${tr.loss.toFixed(3)} / ${(tr.acc*100).toFixed(0)}%`;
+    oTest.textContent =`${te.loss.toFixed(3)} / ${(te.acc*100).toFixed(0)}%`;
+    const gap=tr.acc-te.acc;
+    oGapV.textContent=(gap*100).toFixed(0)+'%';
+    if(gap>0.18){ oGap.textContent='过拟合'; oGap.className='pill bad'; }
+    else if(gap>0.08){ oGap.textContent='偏过拟合'; oGap.className='pill warn'; }
+    else { oGap.textContent='良好'; oGap.className='pill ok'; }
+  }
+}
+
+function renderArch(){
+  const v=document.getElementById('archView');
+  let html='';
+  html+='<div class="ly"><div class="cnt">2</div><div class="nm">输入 x</div></div>';
+  hidden.forEach((h,i)=>{
+    html+='<span class="ar">→</span>';
+    html+=`<div class="ly"><div class="cnt">${h}</div><div class="nm">隐藏${i+1}</div>`+
+          `<div class="pm"><button data-act="dec" data-i="${i}">−</button><button data-act="inc" data-i="${i}">+</button></div></div>`;
+  });
+  html+='<span class="ar">→</span>';
+  html+='<div class="ly"><div class="cnt">1</div><div class="nm">输出 p</div></div>';
+  v.innerHTML=html;
+  // 绑定每层加减神经元
+  v.querySelectorAll('button').forEach(b=>{
+    b.onclick=()=>{
+      const i=+b.dataset.i;
+      if(b.dataset.act==='inc' && hidden[i]<8) hidden[i]++;
+      if(b.dataset.act==='dec' && hidden[i]>1) hidden[i]--;
+      renderArch(); rebuild();
+    };
+  });
+  // 结构说明
+  const nLayers=hidden.length;
+  const aNote=document.getElementById('archNote');
+  if(nLayers===0){
+    aNote.innerHTML='<span class="r">0 隐藏层 = 线性分类器</span>：决策边界只能是<b>一条直线</b>。试试在「XOR / 环形 / 螺旋」上训练——准确率会卡住，怎么训都弯不动（§7.2 非线性的必要性）。';
+  } else {
+    const totParams=netParamCount();
+    aNote.innerHTML=`当前 <b>${nLayers}</b> 个隐藏层、激活 <b class="y">${activation}</b>、参数量约 <b>${totParams}</b>。隐藏层把输入折成多个半平面，输出层线性组合它们拼出弯曲边界。`;
+  }
+}
+function netParamCount(){
+  const sizes=[2,...hidden,1]; let p=0;
+  for(let l=1;l<sizes.length;l++) p+=sizes[l-1]*sizes[l]+sizes[l];
+  return p;
+}
+
+// ============================ 控制流 ============================
+function rebuild(){           // 改结构/激活 -> 重建网络与权重，保留数据
+  buildNet(); computeHeat(); refreshStats(); draw();
+}
+function rebuildData(){        // 重采样数据
+  makeData(); buildNet(); computeHeat(); refreshStats(); draw();
+}
+
+let rafId=null;
+const STEPS_PER_FRAME=2;      // 每个动画帧跑几个 epoch（训练与重绘解耦）
+const REDRAW_EVERY=3;         // 每 N 帧才重算热力图 + 重绘一次（节流，省前向）
+let frameTick=0;
+function loop(t){
+  if(!playing){ return; }
+  // 训练：每帧跑数个 epoch，每个 epoch 后按 epoch 对齐记录一次损失曲线
+  for(let s=0;s<STEPS_PER_FRAME && !net.diverged;s++){
+    trainEpoch();
+    const tr=evalSet(train), te=evalSet(test);
+    lossHist.push({tr:tr.loss, te:te.loss, ep:epoch}); // 每点 = 一个 epoch
+    if(lossHist.length>600) lossHist.shift();
+  }
+  // 重绘：与训练步解耦，节流为每 REDRAW_EVERY 帧一次（热力图最贵），发散时立即收尾
+  frameTick++;
+  if(frameTick%REDRAW_EVERY===0 || net.diverged){
+    computeHeat();
+    refreshStats();
+    draw();
+  }
+  if(net.diverged){ setPlay(false); }
+  rafId=requestAnimationFrame(loop);
+}
+function setPlay(on){
+  if(on && net.diverged){ buildNet(); computeHeat(); } // 发散后再点训练 = 先复位
+  playing=on;
+  bPlay.textContent = on ? '⏸ 暂停' : '▶ 训练';
+  bPlay.classList.toggle('active', on);
+  if(on){ rafId=requestAnimationFrame(loop); }
+  else if(rafId){ cancelAnimationFrame(rafId); rafId=null; }
+}
+
+// ============================ 事件绑定 ============================
+document.querySelectorAll('#datasets button').forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll('#datasets button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    dataset=b.dataset.d; setPlay(false); rebuildData();
+  };
+});
+document.querySelectorAll('#actSeg button').forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll('#actSeg button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    activation=b.dataset.a; setPlay(false); renderArch(); rebuild();
+  };
+});
+sNoise.oninput=e=>{ noise=+e.target.value; vNoise.textContent=noise.toFixed(2); setPlay(false); rebuildData(); };
+sN.oninput=e=>{ nPoints=+e.target.value; vN.textContent=nPoints; setPlay(false); rebuildData(); };
+sLR.oninput=e=>{ lr=Math.pow(10, +e.target.value); vLR.textContent=lr.toFixed(lr<0.01?4:(lr<0.1?3:2)); };
+
+bLayerPlus.onclick=()=>{ if(hidden.length<3){ hidden.push(4); renderArch(); setPlay(false); rebuild(); } };
+bLayerMinus.onclick=()=>{ if(hidden.length>0){ hidden.pop(); renderArch(); setPlay(false); rebuild(); } };
+
+bPlay.onclick=()=> setPlay(!playing);
+bReset.onclick=()=>{ setPlay(false); buildNet(); computeHeat(); refreshStats(); draw(); };
+bNewData.onclick=()=>{ setPlay(false); rebuildData(); };
+
+// 画笔类别切换（让触屏 / 无右键设备也能添加类别 0 点）
+function refreshPen(){
+  bPenClass.innerHTML = penClass
+    ? '在画布点击添加 <b style="color:var(--orange)">类别 1</b> 点（点此切换）'
+    : '在画布点击添加 <b style="color:var(--violet)">类别 0</b> 点（点此切换）';
+}
+bPenClass.onclick=()=>{ penClass=penClass?0:1; refreshPen(); };
+
+// 在主画布点击 = 添加一个训练点（左键=当前画笔类别 / 右键强制类别 0）
+cv.addEventListener('pointerdown',e=>{
+  const g=plotGeom(); const r=cv.getBoundingClientRect();
+  const px=e.clientX-r.left, py=e.clientY-r.top;
+  if(px<g.ox||px>g.ox+g.side||py<g.oy||py>g.oy+g.side) return;
+  const wx=inv_gx(px,g), wy=inv_gy(py,g);
+  const lab = (e.button===2)?0:penClass;
+  train.push({x:wx,y:wy,label:lab});
+  if(!playing){ refreshStats(); draw(); }
+});
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+
+// ============================ 图例 / 提示 ============================
+legendEl.innerHTML =
+  '<div><span class="sw" style="background:rgba(245,166,35,.75)"></span>背景偏<b style="color:var(--orange)">橙</b> = 网络判<b>类别 1</b>（p→1）</div>'+
+  '<div><span class="sw" style="background:rgba(179,136,255,.75)"></span>背景偏<b style="color:var(--violet)">紫</b> = 判<b>类别 0</b>（p→0）</div>'+
+  '<div><span class="ln" style="border-color:rgba(255,255,255,.85)"></span>白线 = <b>决策边界</b> p=0.5</div>'+
+  '<div><span class="dot" style="background:rgba(245,166,35,.95)"></span>实心 = <b>训练点</b> &nbsp; <span class="dot" style="background:transparent;border:2px solid rgba(179,136,255,.95)"></span>空心 = <b>测试点</b></div>'+
+  '<div><span class="ln" style="border-color:var(--orange)"></span>训练损失 &nbsp; <span class="ln" style="border-color:var(--cyan)"></span>测试损失（右上）</div>';
+hintEl.innerHTML='操作提示（§7.2）：点「<b>▶ 训练</b>」看边界成形；先用 <b>0 隐藏层</b> 试「<b class="r">XOR</b>」会卡住，再「<b>+ 隐藏层</b>」看它弯起来。在画布上点击<b>添加新训练点</b>：左键 = 当前「画笔类别」、右键 = 类别 0；触屏 / 无右键设备用右侧「<b>画笔类别</b>」钮切换类别。η 调太大会<b class="r">发散</b>。';
+
+// ============================ 初始化 ============================
+function init(){
+  vNoise.textContent=noise.toFixed(2);
+  vN.textContent=nPoints;
+  vLR.textContent=lr.toFixed(2);
+  renderArch();
+  refreshPen();
+  resize();
+  makeData(); buildNet(); computeHeat(); refreshStats(); draw();
+}
+init();
+</script>
+</body>
+</html>

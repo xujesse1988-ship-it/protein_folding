@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>偏差-方差 / 欠拟合-过拟合沙盘 —— 配套第 2 章</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a24; --panel2:#1f2330; --line:#2b3040;
+    --text:#e7e9f0; --dim:#9aa0b4;
+    --orange:#f5a623;  /* 训练点 / 训练误差 */
+    --cyan:#22c7d6;    /* 拟合曲线 / 测试误差 */
+    --yellow:#ffd166;  /* 真函数 */
+    --violet:#b388ff;  /* 重采样的方差曲线束 */
+    --red:#ef6b73;     /* 过拟合 / 警示 */
+    --green:#7bd88f;   /* 恰好 / 最佳复杂度 */
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;}
+  header{padding:13px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{margin:0;font-size:18px;letter-spacing:.3px}
+  header h1 .c{color:var(--cyan)} header h1 .o{color:var(--orange)} header h1 .y{color:var(--yellow)}
+  header p{margin:5px 0 0;color:var(--dim);font-size:13px;line-height:1.65}
+  header p b{color:#fff}
+  .wrap{display:flex;height:calc(100% - 86px);min-height:0}
+  .stage{position:relative;flex:1 1 auto;min-width:0;overflow:hidden;
+    background:radial-gradient(circle at 48% 46%,#161a26 0%,#0d0f15 84%)}
+  #cv{display:block;width:100%;height:100%;cursor:crosshair}
+  .legend{position:absolute;left:14px;top:12px;font-size:12.5px;pointer-events:none;
+    background:rgba(15,17,23,.62);padding:8px 11px;border-radius:8px;border:1px solid var(--line);line-height:1.95}
+  .legend .ln{display:inline-block;width:18px;height:0;border-top:3px solid;margin-right:6px;vertical-align:middle}
+  .legend .dn{display:inline-block;width:18px;height:0;border-top:3px dashed;margin-right:6px;vertical-align:middle}
+  .legend .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:middle}
+  .hint{position:absolute;left:14px;bottom:12px;color:var(--dim);font-size:12px;pointer-events:none;
+    background:rgba(15,17,23,.55);padding:6px 10px;border-radius:8px;border:1px solid var(--line);max-width:620px;line-height:1.6}
+  .panel{flex:0 0 430px;max-width:55%;overflow-y:auto;border-left:1px solid var(--line);background:var(--panel);padding:16px}
+  .panel h2{font-size:14px;margin:18px 0 8px;color:#fff}
+  .panel h2:first-child{margin-top:0}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+  button{background:#262b3a;color:var(--text);border:1px solid var(--line);border-radius:8px;
+    padding:7px 11px;font-size:13px;cursor:pointer}
+  button:hover{filter:brightness(1.13)}
+  button.active{background:#2f3a4f;border-color:var(--cyan);color:#fff}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .row{display:flex;align-items:center;gap:10px;margin:9px 0}
+  .row label{flex:0 0 96px;font-weight:600;font-size:12.5px}
+  input[type=range]{flex:1 1 auto;accent-color:var(--cyan)}
+  .val{flex:0 0 60px;text-align:right;font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px}
+  .stat{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px dashed #2b3040}
+  .stat:last-child{border-bottom:none}
+  .stat span:last-child{color:#fff;font-variant-numeric:tabular-nums}
+  .note{font-size:12.5px;color:var(--dim);line-height:1.85}
+  .note b{color:#e7e9f0}
+  .note .o{color:var(--orange)} .note .c{color:var(--cyan)} .note .y{color:var(--yellow)}
+  .note .v{color:var(--violet)} .note .r{color:var(--red)} .note .g{color:var(--green)}
+  code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#cdd6f4}
+  .presets{display:flex;flex-wrap:wrap;gap:6px}
+  .presets button{flex:1 1 30%;font-size:12px;padding:6px 4px}
+  .btnrow{display:flex;gap:8px;margin-top:6px}
+  .btnrow button{flex:1 1 0}
+  .toggles{display:flex;flex-wrap:wrap;gap:10px;font-size:12.5px;margin-top:8px}
+  .toggles label{display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--dim)}
+  .toggles input{accent-color:var(--cyan)}
+  .pill{display:inline-block;padding:1px 8px;border-radius:6px;font-size:12px;font-weight:600;margin-left:6px}
+  .pill.under{background:rgba(123,216,143,.0);color:var(--cyan);border:1px solid var(--cyan)}
+  .pill.good{background:rgba(123,216,143,.16);color:var(--green)}
+  .pill.over{background:rgba(239,107,115,.16);color:var(--red)}
+  #curveCv{display:block;width:100%;height:150px;border-radius:8px;background:#13151d;border:1px solid var(--line)}
+  .barwrap{margin-top:8px}
+  .barlab{display:flex;justify-content:space-between;font-size:12px;color:var(--dim);margin:6px 0 2px}
+  .bar{height:12px;border-radius:6px;background:#0d0f15;overflow:hidden;border:1px solid var(--line)}
+  .bar > i{display:block;height:100%;border-radius:6px}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="o">偏差</span>-<span class="v">方差</span>沙盘 · 亲手拖出<span class="c">欠拟合 ↔ 过拟合</span></h1>
+  <p>从一条<b class="y">真函数 f(x)</b> 加高斯噪声采样出<b class="o">训练点</b>，用<b>多项式最小二乘（带 L2 岭回归）</b>去拟合。拖<b>degree（容量）</b>滑杆：低阶曲线<b>太僵 → 欠拟合（高偏差 bias）</b>，高阶曲线<b>追着噪声乱抖 → 过拟合（高方差 variance）</b>。叠加多条「换种子重采样后的拟合」可<b>看见方差</b>（曲线束抖动幅度）。右侧实时读出训练 / 测试 MSE 与那条经典 <b>U 形</b>泛化曲线。这正是《机器学习深度入门》第 2 章核心——暗线一「泛化」的第一个高峰，与偏差-方差分解 E[(y−f̂)²]=Bias²+Var+σ²。</p>
+</header>
+<div class="wrap">
+  <div class="stage">
+    <canvas id="cv"></canvas>
+    <div class="legend" id="legend"></div>
+    <div class="hint" id="hint"></div>
+  </div>
+  <div class="panel">
+
+    <h2>模型容量与数据（§2.3 / §2.4）</h2>
+    <div class="card">
+      <div class="row"><label>多项式阶数 degree</label><input id="sDeg" type="range" min="1" max="15" step="1" value="3"><span class="val" id="vDeg">3</span></div>
+      <div class="row"><label>训练样本数 n</label><input id="sN" type="range" min="6" max="80" step="1" value="20"><span class="val" id="vN">20</span></div>
+      <div class="row"><label>噪声 σ (noise)</label><input id="sNoise" type="range" min="0" max="0.8" step="0.02" value="0.25"><span class="val" id="vNoise">0.25</span></div>
+      <div class="row"><label>L2 强度 lg λ</label><input id="sLam" type="range" min="-9" max="2" step="0.2" value="-9"><span class="val" id="vLam">λ=0</span></div>
+      <div class="btnrow">
+        <button id="bResample">↻ 重采样（换种子）</button>
+        <button id="bReset">重置默认</button>
+      </div>
+      <div class="toggles">
+        <label><input type="checkbox" id="tTest" checked> 显示测试点（test）</label>
+        <label><input type="checkbox" id="tVar" checked> 叠加方差曲线束</label>
+        <label><input type="checkbox" id="tTrue" checked> 显示真函数</label>
+      </div>
+    </div>
+
+    <h2>误差读数（训练 vs 测试 MSE）</h2>
+    <div class="card">
+      <div class="stat"><span>训练 MSE（train，单次拟合）</span><span id="oTrain">—</span></div>
+      <div class="stat"><span>测试 MSE（test，单次拟合·泛化代理）</span><span id="oTest">—</span></div>
+      <div class="stat"><span>期望测试 MSE（24 重采样均值 = Bias²+Var+σ²）</span><span id="oTestE">—</span></div>
+      <div class="stat"><span>泛化间隙 test − train</span><span id="oGap">—</span></div>
+      <div class="stat"><span>不可约噪声 σ²（理论下界）</span><span id="oSig2">—</span></div>
+      <div class="stat"><span>当前诊断<span id="oPill" class="pill good">恰好</span></span><span id="oCap">deg 3</span></div>
+    </div>
+
+    <h2>泛化曲线：误差随 degree（U 形）</h2>
+    <div class="card">
+      <canvas id="curveCv"></canvas>
+      <div class="note" style="margin-top:8px">
+        <span class="o">━ 训练 MSE</span> 随容量单调↓（越复杂越能背训练集）；
+        <span class="c">━ 测试 MSE</span> 先↓后↑成 <b>U 形</b>；
+        谷底 <span class="g">●</span> = 当前 σ/n/λ 下的<b>最佳复杂度</b>。
+        竖线 = 你现在选的 degree。改 λ 或 n 看整条曲线如何变形。
+      </div>
+    </div>
+
+    <h2>偏差-方差三项分解（§2.5）</h2>
+    <div class="card">
+      <div class="note">在 24 条重采样上重复拟合、对每个 x 估计「平均预测」与「预测的抖动」，近似分解<b>期望测试误差</b>为三块（点开「方差曲线束」更直观）。<b style="color:var(--dim)">口径提示</b>：这里 Bias²+Var+σ² 是<b>多次重采样的期望分解</b>，与上方那条<b>单次拟合</b>的「测试 MSE」口径不同，二者不可直接相加对齐；理论上 Bias²+Var+σ² 等于的是<b>期望泛化误差</b>（即 U 形曲线上当前 degree 的青点）。</div>
+      <div class="barwrap">
+        <div class="barlab"><span>偏差² Bias²（欠拟合主因，模型太僵）</span><span id="oBias">—</span></div>
+        <div class="bar"><i id="barBias" style="background:var(--orange)"></i></div>
+        <div class="barlab"><span>方差 Variance（过拟合主因，对数据敏感）</span><span id="oVar">—</span></div>
+        <div class="bar"><i id="barVar" style="background:var(--violet)"></i></div>
+        <div class="barlab"><span>不可约噪声 σ²（谁也消不掉的下界）</span><span id="oIrr">—</span></div>
+        <div class="bar"><i id="barIrr" style="background:var(--dim);background:#9aa0b4"></i></div>
+      </div>
+    </div>
+
+    <h2>文字解说 · 当前发生了什么</h2>
+    <div class="card note" id="verdict"></div>
+
+    <h2>必玩四个现象（§2.4 / §2.5 / §2.6）</h2>
+    <div class="card">
+      <div class="presets">
+        <button data-p="under">① 欠拟合：deg 1</button>
+        <button data-p="good">② 恰好：deg 3</button>
+        <button data-p="over">③ 过拟合：deg 14</button>
+        <button data-p="reg">④ 正则救场</button>
+        <button data-p="bign">⑤ 多数据救场</button>
+        <button data-p="noisy">⑥ 大噪声</button>
+      </div>
+      <div class="note" style="margin-top:10px">
+        <p><b class="c">① 欠拟合（underfitting）</b>：deg=1 直线穿不过弯曲的真函数，训练 / 测试 MSE 都高且接近——<b>高偏差</b>，曲线束几乎不抖（低方差）。</p>
+        <p><b class="g">② 恰好（good fit）</b>：deg=3 与真函数弯曲程度相称，测试 MSE 接近谷底，偏差²与方差大致平衡——这正是 U 形的底部。</p>
+        <p><b class="r">③ 过拟合（overfitting）</b>：deg=14、λ=0，曲线穿过几乎每个训练点（训练 MSE→0）却在点间剧烈摆动，测试 MSE 飙升、泛化间隙大——<b>高方差</b>，曲线束抖成一团。</p>
+        <p><b class="g">④ 正则救场</b>：保持 deg=14，把 <b>L2 λ</b> 调大，曲线被「拉平、压向 0」——方差↓、偏差略↑，过拟合被抑制（L2 ↔ 高斯先验 MAP，见《概率与统计》第 8 章）。</p>
+        <p><b class="o">⑤ 多数据救场</b>：保持 deg=14，把 n 增到 80，同一个高阶模型的方差自然下降——数据是方差的天然解药（与正则互补）。</p>
+        <p><b class="v">⑥ 大噪声</b>：把 σ 调到 0.7，不可约噪声 σ² 抬高了整条 U 形的下界，谷底也变浅、最佳复杂度趋于更低——噪声越大越该用简单模型。</p>
+      </div>
+    </div>
+
+    <h2>怎么读这张图</h2>
+    <div class="card note">
+      <p><b>三件套视角（暗线二）</b>：表示 = 次数 ≤ degree 的多项式（容量旋钮）；目标 = 带 L2 的均方误差 <code>‖Xw−y‖²+λ‖w‖²</code>；优化 = 正规方程闭式解 <code>w=(XᵀX+λI)⁻¹Xᵀy</code>（这里用增广最小二乘 + 高斯消元自实现）。</p>
+      <p><b>归纳偏置（暗线三）</b>：低 degree / 大 λ 都在说「我赌真函数是简单光滑的」。当这个先验和真函数对得上 ⇒ 泛化好；对不上（如用直线拟合正弦）⇒ 偏差大。没有免费的午餐：必须押注。</p>
+      <p><b>诚实的边界</b>：① 这里用「测试集 MSE」当泛化误差的代理，真实中不能拿测试集调参 / 选 degree（要用验证集 / 交叉验证）；② σ² 是采样时人为设定的，现实中未知；③ 经典 U 形是低维 / 欠参数化下的图景，超大网络的「双下降」（double descent）会打破它，见第 9 章。</p>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const ccv = document.getElementById('curveCv');
+const cctx = ccv.getContext('2d');
+const legendEl = document.getElementById('legend');
+const hintEl   = document.getElementById('hint');
+
+// ---------- 全局状态 ----------
+let degree = 3;
+let nTrain = 20;
+let noise  = 0.25;
+let logLam = -9;          // λ = 10^logLam；-9 视为 0
+let seed   = 12345;       // 当前训练集种子
+let trueFn = 'sine';      // 真函数类型
+const NTEST = 200;        // 测试点个数（固定大样本，做泛化代理）
+const XMIN = -1, XMAX = 1;
+
+let train = {x:[], y:[]};  // 训练数据
+let test  = {x:[], y:[]};  // 测试数据（同分布，含噪）
+let testClean = [];        // 测试点处的真值（用于偏差²估计）
+
+// 画布几何
+let DPR=1,W=0,H=0;
+// 世界坐标范围（y 自适应）
+let YMIN=-1.6, YMAX=1.6;
+
+// ---------- 确定性伪随机（线性同余 + Box-Muller），保证「换种子=换重采样」可复现 ----------
+function makeRng(s){
+  let state = (s>>>0) || 1;
+  return function(){
+    // xorshift32
+    state ^= state<<13; state>>>=0;
+    state ^= state>>17;
+    state ^= state<<5;  state>>>=0;
+    return state / 4294967296;
+  };
+}
+function gauss(rng){
+  let u=0,v=0;
+  while(u===0) u=rng();
+  while(v===0) v=rng();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+}
+
+// ---------- 真函数 ----------
+function f(x){
+  if(trueFn==='cubic') return 2*x*x*x - 1.1*x; // 三次多项式
+  return Math.sin(2.3*Math.PI*x*0.5+0.4);       // 带相位的正弦，区间内约 1.2 个周期
+}
+
+// ---------- 生成数据 ----------
+function genTrain(){
+  const rng = makeRng(seed);
+  train = {x:[], y:[]};
+  for(let i=0;i<nTrain;i++){
+    // x 在区间内近似均匀但带抖动，避免完全规则
+    const x = XMIN + (XMAX-XMIN)*( (i+0.5)/nTrain + (rng()-0.5)*0.5/nTrain );
+    const xc = Math.max(XMIN, Math.min(XMAX, x));
+    train.x.push(xc);
+    train.y.push(f(xc) + noise*gauss(rng));
+  }
+}
+function genTest(){
+  // 测试集种子固定（与训练种子无关），作为稳定的泛化估计
+  const rng = makeRng(999983);
+  test = {x:[], y:[]}; testClean=[];
+  for(let i=0;i<NTEST;i++){
+    const x = XMIN + (XMAX-XMIN)*rng();
+    test.x.push(x);
+    const c = f(x);
+    testClean.push(c);
+    test.y.push(c + noise*gauss(rng));
+  }
+}
+
+// ---------- 多项式特征 + 岭回归（自实现线性代数）----------
+// 构造 Vandermonde：phi(x)=[1,x,...,x^deg]；为数值稳定，x 已在[-1,1]
+function polyFeat(x, deg){
+  const row = new Array(deg+1);
+  let p=1;
+  for(let j=0;j<=deg;j++){ row[j]=p; p*=x; }
+  return row;
+}
+// 解 (XᵀX + λI) w = Xᵀy，λ 不作用于截距项(j=0)。高斯消元（带部分主元）。
+function ridgeFit(xs, ys, deg, lam){
+  const m = deg+1;
+  // A = XᵀX (m×m)，b = Xᵀy (m)
+  const A = Array.from({length:m},()=>new Array(m).fill(0));
+  const b = new Array(m).fill(0);
+  for(let i=0;i<xs.length;i++){
+    const phi = polyFeat(xs[i], deg);
+    for(let r=0;r<m;r++){
+      b[r] += phi[r]*ys[i];
+      for(let c=0;c<m;c++) A[r][c] += phi[r]*phi[c];
+    }
+  }
+  // 加岭项（跳过截距 j=0），并加极小 jitter 防奇异
+  for(let r=0;r<m;r++){
+    A[r][r] += (r===0 ? 1e-10 : lam) + 1e-10;
+  }
+  return solve(A, b, m);
+}
+// 高斯消元解 Aw=b（A m×m，部分主元）
+function solve(A, b, m){
+  // 复制，避免污染
+  const M = A.map(row=>row.slice());
+  const v = b.slice();
+  for(let col=0;col<m;col++){
+    // 部分主元
+    let piv=col, mx=Math.abs(M[col][col]);
+    for(let r=col+1;r<m;r++){ if(Math.abs(M[r][col])>mx){ mx=Math.abs(M[r][col]); piv=r; } }
+    if(mx<1e-14){ continue; } // 近奇异列，跳过（残留 0，行为退化但不崩）
+    if(piv!==col){ const t=M[piv]; M[piv]=M[col]; M[col]=t; const tv=v[piv]; v[piv]=v[col]; v[col]=tv; }
+    const d=M[col][col];
+    for(let r=0;r<m;r++){
+      if(r===col) continue;
+      const factor=M[r][col]/d;
+      if(factor===0) continue;
+      for(let c=col;c<m;c++) M[r][c]-=factor*M[col][c];
+      v[r]-=factor*v[col];
+    }
+  }
+  const w=new Array(m).fill(0);
+  for(let i=0;i<m;i++){ w[i] = Math.abs(M[i][i])<1e-14 ? 0 : v[i]/M[i][i]; }
+  return w;
+}
+function predict(w, x){
+  let p=1, s=0;
+  for(let j=0;j<w.length;j++){ s+=w[j]*p; p*=x; }
+  return s;
+}
+function mse(w, xs, ys){
+  let s=0;
+  for(let i=0;i<xs.length;i++){ const e=predict(w,xs[i])-ys[i]; s+=e*e; }
+  return xs.length? s/xs.length : 0;
+}
+
+// ---------- 当前 λ ----------
+function lambda(){ return logLam<=-8.5 ? 0 : Math.pow(10, logLam); }
+
+// ---------- 重采样束：在多个独立种子上拟合，估计方差与偏差² ----------
+const NREP = 24;             // 重采样次数（束的曲线条数 / 蒙特卡洛分解）
+// 用第 r 个重采样种子生成一份训练集（与主训练集同分布、同抽样方式，仅换种子）
+function resampleData(r){
+  const rng = makeRng(7919*(r+1)+1);
+  const xs=[], ys=[];
+  for(let i=0;i<nTrain;i++){
+    const x = XMIN + (XMAX-XMIN)*( (i+0.5)/nTrain + (rng()-0.5)*0.5/nTrain );
+    const xc = Math.max(XMIN, Math.min(XMAX, x));
+    xs.push(xc); ys.push(f(xc)+noise*gauss(rng));
+  }
+  return {x:xs, y:ys};
+}
+// 给定阶数 deg，在 NREP 个重采样上拟合，返回 {ws, biasSq, variance, testMSE}
+// testMSE = 多次重采样的平均测试 MSE（期望泛化误差的蒙特卡洛估计，与 §2.5 分解口径一致）
+function decompose(deg){
+  const lam=lambda();
+  const ws=[];
+  for(let r=0;r<NREP;r++){ ws.push(ridgeFitResample(r, deg, lam)); }
+  let biasSq=0, variance=0, testMSE=0;
+  const G = test.x.length;
+  for(let i=0;i<G;i++){
+    const x=test.x[i], yObs=test.y[i], yTrue=testClean[i];
+    let mean=0;
+    const preds=new Array(NREP);
+    for(let r=0;r<NREP;r++){ const p=predict(ws[r],x); preds[r]=p; mean+=p; }
+    mean/=NREP;
+    let vv=0, em=0;
+    for(let r=0;r<NREP;r++){ const dlt=preds[r]-mean; vv+=dlt*dlt; const e=preds[r]-yObs; em+=e*e; }
+    vv/=NREP; em/=NREP;
+    const bb=(mean-yTrue);
+    biasSq += bb*bb;
+    variance += vv;
+    testMSE += em;
+  }
+  biasSq/=G; variance/=G; testMSE/=G;
+  return {ws, biasSq, variance, testMSE};
+}
+// 用第 r 个重采样种子在阶数 deg 下拟合
+function ridgeFitResample(r, deg, lam){
+  const d=resampleData(r);
+  return ridgeFit(d.x, d.y, deg, lam);
+}
+
+// ---------- 画布尺寸 / DPR 适配 ----------
+function resize(){
+  DPR = window.devicePixelRatio||1;
+  const r = cv.getBoundingClientRect();
+  W=r.width; H=r.height;
+  cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  // 小曲线画布
+  const rc=ccv.getBoundingClientRect();
+  ccv.width=Math.round(rc.width*DPR); ccv.height=Math.round(rc.height*DPR);
+  cctx.setTransform(DPR,0,0,DPR,0,0);
+  recompute();
+}
+window.addEventListener('resize', resize);
+
+// 主画布世界->屏幕（带边距）
+const PAD=46;
+function sx(x){ return PAD + (x-XMIN)/(XMAX-XMIN)*(W-2*PAD); }
+function sy(y){ return PAD*0.7 + (YMAX-y)/(YMAX-YMIN)*(H-2*(PAD*0.7)); }
+
+// ---------- 计算缓存 ----------
+let curW = null;      // 当前主拟合
+let ens = null;       // 重采样束
+let curveTrain=[], curveTest=[]; // U 形曲线数据
+let bestDeg = 3;
+
+function recompute(){
+  genTest();
+  genTrain();
+  // 自适应 y 范围（看真函数 + 数据），保持对称、留余量
+  let lo=Math.min(...train.y, ...testClean, -1.2);
+  let hi=Math.max(...train.y, ...testClean, 1.2);
+  const span=Math.max(hi-lo, 1.5);
+  const mid=(hi+lo)/2;
+  YMIN=mid-span*0.72; YMAX=mid+span*0.72;
+
+  const lam=lambda();
+  curW = ridgeFit(train.x, train.y, degree, lam);
+
+  // U 形曲线：对每个 degree，train MSE 用当前训练集；test MSE 用 NREP 个重采样的平均
+  // 测试误差（期望泛化误差的蒙特卡洛估计），与 §2.5 偏差-方差分解同口径，bestDeg 因此稳定。
+  curveTrain=[]; curveTest=[];
+  let curEns=null;
+  for(let d=1; d<=15; d++){
+    const w = ridgeFit(train.x, train.y, d, lam);
+    curveTrain.push(mse(w, train.x, train.y));
+    const dec = decompose(d);              // 在 d 阶上做重采样分解
+    curveTest.push(dec.testMSE);           // 平均测试 MSE（不再随单次重采样跳动）
+    if(d===degree) curEns = dec;           // 当前 degree 的分解直接复用，省一次计算
+  }
+  ens = curEns || decompose(degree);
+  // 最佳复杂度 = 平均测试 MSE 最小的 degree
+  let bi=0, bv=Infinity;
+  for(let i=0;i<curveTest.length;i++){ if(curveTest[i]<bv){ bv=curveTest[i]; bi=i; } }
+  bestDeg = bi+1;
+
+  draw();
+  drawCurve();
+  updatePanel();
+}
+
+// ---------- 主绘制 ----------
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // 网格
+  ctx.strokeStyle='rgba(120,130,160,.08)'; ctx.lineWidth=1;
+  for(let gx=-1;gx<=1;gx+=0.25){ ctx.beginPath(); ctx.moveTo(sx(gx),sy(YMAX)); ctx.lineTo(sx(gx),sy(YMIN)); ctx.stroke(); }
+  const yStep=0.5;
+  for(let gy=Math.ceil(YMIN/yStep)*yStep; gy<=YMAX; gy+=yStep){ ctx.beginPath(); ctx.moveTo(sx(XMIN),sy(gy)); ctx.lineTo(sx(XMAX),sy(gy)); ctx.stroke(); }
+  // 轴
+  ctx.strokeStyle='rgba(200,210,235,.18)';
+  ctx.beginPath(); ctx.moveTo(sx(XMIN),sy(0)); ctx.lineTo(sx(XMAX),sy(0)); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(sx(0),sy(YMAX)); ctx.lineTo(sx(0),sy(YMIN)); ctx.stroke();
+  // 轴标注
+  ctx.fillStyle='#9aa0b4'; ctx.font='11px system-ui';
+  ctx.fillText('x', sx(XMAX)-12, sy(0)-6);
+  ctx.fillText('y', sx(0)+6, sy(YMAX)+12);
+
+  // 方差曲线束（淡紫，多条重采样拟合）
+  if(tVar.checked && ens){
+    ctx.strokeStyle='rgba(179,136,255,.22)'; ctx.lineWidth=1;
+    for(let r=0;r<ens.ws.length;r++){
+      drawPoly(ens.ws[r], 'rgba(179,136,255,.20)', 1);
+    }
+  }
+
+  // 真函数（黄）
+  if(tTrue.checked){
+    ctx.beginPath();
+    for(let i=0;i<=240;i++){
+      const x=XMIN+(XMAX-XMIN)*i/240; const X=sx(x), Y=sy(f(x));
+      i?ctx.lineTo(X,Y):ctx.moveTo(X,Y);
+    }
+    ctx.strokeStyle='#ffd166'; ctx.lineWidth=2.4; ctx.setLineDash([8,5]); ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  // 测试点（半透明小点，青）
+  if(tTest.checked){
+    for(let i=0;i<test.x.length;i++){
+      const X=sx(test.x[i]), Y=sy(test.y[i]);
+      if(Y<0||Y>H) continue;
+      ctx.beginPath(); ctx.arc(X,Y,2,0,7); ctx.fillStyle='rgba(34,199,214,.30)'; ctx.fill();
+    }
+  }
+
+  // 当前拟合（青，粗）
+  drawPoly(curW, '#22c7d6', 3);
+
+  // 训练点（橙，带误差竖线连到拟合）
+  for(let i=0;i<train.x.length;i++){
+    const X=sx(train.x[i]), Y=sy(train.y[i]);
+    const yf=predict(curW, train.x[i]);
+    // 残差竖线
+    ctx.beginPath(); ctx.moveTo(X,Y); ctx.lineTo(X, sy(yf));
+    ctx.strokeStyle='rgba(245,166,35,.30)'; ctx.lineWidth=1; ctx.stroke();
+    // 点
+    ctx.beginPath(); ctx.arc(X,Y,4,0,7);
+    ctx.fillStyle='#f5a623'; ctx.fill();
+    ctx.strokeStyle='#0f1117'; ctx.lineWidth=1.2; ctx.stroke();
+  }
+}
+function drawPoly(w, col, wd){
+  if(!w) return;
+  ctx.beginPath();
+  let started=false;
+  for(let i=0;i<=300;i++){
+    const x=XMIN+(XMAX-XMIN)*i/300;
+    const y=predict(w,x);
+    const X=sx(x), Y=sy(y);
+    // 越界裁剪：超出画布很多就断开，避免高阶尖峰拉满全屏
+    if(Y< -H || Y> 2*H){ started=false; continue; }
+    if(!started){ ctx.moveTo(X,Y); started=true; } else ctx.lineTo(X,Y);
+  }
+  ctx.strokeStyle=col; ctx.lineWidth=wd; ctx.stroke();
+}
+
+// ---------- 小曲线（U 形）绘制 ----------
+function drawCurve(){
+  const w=ccv.getBoundingClientRect().width, h=ccv.getBoundingClientRect().height;
+  cctx.clearRect(0,0,w,h);
+  const pad=22, padT=10, padB=18;
+  const all=curveTrain.concat(curveTest).filter(v=>isFinite(v));
+  let hi=Math.max(...all, 1e-6);
+  // 对数刻度更能同时看清两条；下界取一个小正数
+  let lo=Math.max(1e-4, Math.min(...all.filter(v=>v>0), hi));
+  const useLog=true;
+  function ty(v){
+    v=Math.max(v, lo*0.5);
+    if(useLog){ const a=Math.log10(lo*0.5), b=Math.log10(hi*1.4); return padT + (1-(Math.log10(v)-a)/(b-a))*(h-padT-padB); }
+    return padT + (1-v/(hi*1.1))*(h-padT-padB);
+  }
+  function tx(d){ return pad + (d-1)/14*(w-pad-6); }
+  // 网格 + degree 刻度
+  cctx.strokeStyle='rgba(120,130,160,.10)'; cctx.lineWidth=1;
+  for(let d=1; d<=15; d+=2){ cctx.beginPath(); cctx.moveTo(tx(d),padT); cctx.lineTo(tx(d),h-padB); cctx.stroke(); }
+  cctx.fillStyle='#9aa0b4'; cctx.font='10px system-ui';
+  cctx.fillText('1', tx(1)-2, h-6); cctx.fillText('8', tx(8)-3, h-6); cctx.fillText('15', tx(15)-6, h-6);
+  cctx.fillText('degree →', w-58, h-6);
+  cctx.save(); cctx.translate(8,h/2); cctx.rotate(-Math.PI/2); cctx.fillText('MSE (log)', -20,0); cctx.restore();
+
+  // 当前 degree 竖线
+  cctx.strokeStyle='rgba(231,233,240,.30)'; cctx.setLineDash([4,4]);
+  cctx.beginPath(); cctx.moveTo(tx(degree),padT); cctx.lineTo(tx(degree),h-padB); cctx.stroke(); cctx.setLineDash([]);
+
+  // 训练曲线（橙）
+  cctx.beginPath();
+  for(let i=0;i<15;i++){ const X=tx(i+1), Y=ty(curveTrain[i]); i?cctx.lineTo(X,Y):cctx.moveTo(X,Y); }
+  cctx.strokeStyle='#f5a623'; cctx.lineWidth=2; cctx.stroke();
+  // 测试曲线（青）
+  cctx.beginPath();
+  for(let i=0;i<15;i++){ const X=tx(i+1), Y=ty(curveTest[i]); i?cctx.lineTo(X,Y):cctx.moveTo(X,Y); }
+  cctx.strokeStyle='#22c7d6'; cctx.lineWidth=2; cctx.stroke();
+
+  // 最佳复杂度谷底（绿点）
+  const bX=tx(bestDeg), bY=ty(curveTest[bestDeg-1]);
+  cctx.beginPath(); cctx.arc(bX,bY,4,0,7); cctx.fillStyle='#7bd88f'; cctx.fill();
+  cctx.strokeStyle='#0f1117'; cctx.lineWidth=1.5; cctx.stroke();
+}
+
+// ---------- 面板读数 + 解说 ----------
+function updatePanel(){
+  const tr=mse(curW, train.x, train.y);
+  const te=mse(curW, test.x, test.y);
+  const sig2=noise*noise;
+  // 三项分解条
+  const bias=ens.biasSq, varc=ens.variance, irr=sig2;
+  const teExp=bias+varc+irr;   // 期望测试 MSE = Bias²+Var+σ²（与三项分解严格对齐）
+  oTrain.textContent = tr.toFixed(4);
+  oTest.textContent  = te.toFixed(4);
+  oTestE.textContent = teExp.toFixed(4);
+  oGap.textContent   = (te-tr).toFixed(4);
+  oSig2.textContent  = sig2.toFixed(4);
+  oCap.textContent   = 'deg '+degree;
+
+  const tot=Math.max(teExp, 1e-9);
+  oBias.textContent=bias.toFixed(4); oVar.textContent=varc.toFixed(4); oIrr.textContent=irr.toFixed(4);
+  barBias.style.width=(100*bias/tot)+'%';
+  barVar.style.width =(100*varc/tot)+'%';
+  barIrr.style.width =(100*irr/tot)+'%';
+
+  // 诊断：欠 / 恰好 / 过
+  const gapRatio = tr>1e-9 ? te/tr : (te>3*sig2? 99:1);
+  let state, pill;
+  if(degree < bestDeg-0.5 && tr > 1.8*sig2 && bias>varc){
+    state='under'; pill='欠拟合'; oPill.className='pill under';
+  } else if(degree > bestDeg+0.5 && (te-tr) > 0.6*sig2 && varc>=bias){
+    state='over'; pill='过拟合'; oPill.className='pill over';
+  } else if(varc>bias*2.2 && (te-tr)>0.5*sig2){
+    state='over'; pill='过拟合'; oPill.className='pill over';
+  } else if(bias>varc*2.2 && tr>1.6*sig2){
+    state='under'; pill='欠拟合'; oPill.className='pill under';
+  } else {
+    state='good'; pill='恰好'; oPill.className='pill good';
+  }
+  oPill.textContent=pill;
+
+  // 文字解说
+  const lam=lambda();
+  let v='';
+  const head = `当前 <b>degree=${degree}</b>、n=${nTrain}、σ=${noise.toFixed(2)}（σ²=${sig2.toFixed(4)}）、λ=${lam===0?'0':lam.toExponential(1)}。`;
+  if(state==='under'){
+    v=`${head}<br><span class="r">诊断：欠拟合（underfitting）</span>。训练 MSE=${tr.toFixed(4)} 已明显高于噪声下界 σ²，且测试与训练误差<b>都高、彼此接近</b>——模型太僵，连训练集都拟合不好。三项里 <b class="o">偏差²=${bias.toFixed(4)}</b> 占主导（曲线束几乎不抖 ⇒ 低方差）。<b>对策</b>：提高 degree（加容量）或减小 λ。这是暗线一里「容量不足」的一侧。`;
+  } else if(state==='over'){
+    v=`${head}<br><span class="r">诊断：过拟合（overfitting）</span>。训练 MSE=${tr.toFixed(4)} 被压得很低（在追噪声），但测试 MSE=${te.toFixed(4)} 高、<b>泛化间隙=${(te-tr).toFixed(4)}</b> 拉大。三项里 <b class="v">方差=${varc.toFixed(4)}</b> 占主导——看左图<b class="v">紫色曲线束抖成一团</b>：换一批训练数据，拟合就大变。<b>对策</b>：增大 L2 λ（压方差、略升偏差）、增大 n、或降 degree。`;
+  } else {
+    v=`${head}<br><span class="g">诊断：大致恰好（good fit）</span>。测试 MSE=${te.toFixed(4)} 接近其能达到的谷底，偏差²(${bias.toFixed(4)}) 与方差(${varc.toFixed(4)}) 大致平衡，泛化间隙温和。当前 σ/n/λ 下的<b class="g">最佳复杂度约为 degree=${bestDeg}</b>（右侧 U 形谷底）。注意测试 MSE 永远≥不可约噪声 <b>σ²=${sig2.toFixed(4)}</b>——这是谁也消不掉的下界。`;
+  }
+  // λ 的额外提示
+  if(lam>0 && degree>=8){
+    v+=`<br><span class="g">L2 生效中</span>：你给高阶模型加了正则 λ=${lam.toExponential(1)}，相当于「赌系数应该小」的高斯先验（MAP）。把 λ 调到很大会从过拟合滑向欠拟合——正则不是越强越好，存在最优 λ（呼应偏差-方差权衡本身）。`;
+  }
+  verdict.innerHTML=v;
+}
+
+// ---------- 控件 ----------
+sDeg.oninput  = e=>{ degree=+e.target.value; vDeg.textContent=degree; recompute(); };
+sN.oninput    = e=>{ nTrain=+e.target.value; vN.textContent=nTrain; recompute(); };
+sNoise.oninput= e=>{ noise=+e.target.value; vNoise.textContent=noise.toFixed(2); recompute(); };
+sLam.oninput  = e=>{
+  logLam=+e.target.value;
+  const l=lambda();
+  vLam.textContent = l===0 ? 'λ=0' : 'λ=1e'+(logLam>=0?'+':'')+logLam.toFixed(1);
+  recompute();
+};
+tTest.onchange = draw;
+tVar.onchange  = draw;
+tTrue.onchange = draw;
+
+bResample.onclick = ()=>{ seed = (seed*1664525 + 1013904223)>>>0; recompute(); };
+bReset.onclick = ()=>{ applyPreset('good'); };
+
+// ---------- 预设 ----------
+function setUI(){
+  sDeg.value=degree; vDeg.textContent=degree;
+  sN.value=nTrain; vN.textContent=nTrain;
+  sNoise.value=noise; vNoise.textContent=noise.toFixed(2);
+  sLam.value=logLam;
+  const l=lambda(); vLam.textContent = l===0?'λ=0':'λ=1e'+(logLam>=0?'+':'')+logLam.toFixed(1);
+}
+function applyPreset(p){
+  if(p==='under'){ degree=1; nTrain=20; noise=0.25; logLam=-9; }
+  else if(p==='good'){ degree=3; nTrain=20; noise=0.25; logLam=-9; }
+  else if(p==='over'){ degree=14; nTrain=20; noise=0.25; logLam=-9; }
+  else if(p==='reg'){ degree=14; nTrain=20; noise=0.25; logLam=-2.5; }
+  else if(p==='bign'){ degree=14; nTrain=80; noise=0.25; logLam=-9; }
+  else if(p==='noisy'){ degree=8; nTrain=20; noise=0.7; logLam=-9; }
+  setUI(); recompute();
+}
+document.querySelectorAll('.presets button').forEach(b=>{ b.onclick=()=>applyPreset(b.dataset.p); });
+
+// ---------- 图例 / 提示 ----------
+legendEl.innerHTML =
+  '<div><span class="dn" style="border-color:var(--yellow)"></span><b style="color:var(--yellow)">真函数 f(x)</b>（采样的来源，现实中未知）</div>'+
+  '<div><span class="dot" style="background:#f5a623"></span><b style="color:var(--orange)">训练点</b>（含噪，竖线=残差）</div>'+
+  '<div><span class="dot" style="background:rgba(34,199,214,.5)"></span><b style="color:var(--cyan)">测试点</b>（同分布，估泛化）</div>'+
+  '<div><span class="ln" style="border-color:var(--cyan)"></span><b style="color:var(--cyan)">当前拟合曲线</b>（带 L2 最小二乘）</div>'+
+  '<div><span class="ln" style="border-color:var(--violet)"></span><b style="color:var(--violet)">重采样曲线束</b>（抖动幅度 = 方差）</div>';
+hintEl.innerHTML='操作提示（§2.4/§2.5）：拖 <b>degree</b> 从 1→15 看欠拟合滑向过拟合；点「<b>↻ 重采样</b>」多按几次，看高阶时<b class="v">紫色曲线束</b>抖动多大（=方差）；高阶过拟合时把 <b>L2 λ</b> 调大，看曲线被压平、方差被抑制。';
+
+// 初始化
+applyPreset('good');
+resize();
+</script>
+</body>
+</html>
